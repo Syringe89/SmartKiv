@@ -384,12 +384,8 @@ void app_main(void)
     bool local_initial_servo_pos = false;              // Локальная переменная
     nvs_read_servo_position(&local_initial_servo_pos); // Читаем в локальную переменную
 
-    /* Initialize the servo, passing the initial position */
-    ESP_ERROR_CHECK(servo_init());
-
-    /* Создаем задачу управления сервоприводом ПОСЛЕ инициализации */
-    // Третий параметр pvParameters теперь NULL, так как данные передаются через уведомление
-    // Последний параметр - указатель на TaskHandle_t для получения хэндла созданной задачи
+    /* Не инициализируем сервопривод при старте - он будет инициализирован при использовании */
+    /* Создаем задачу управления сервоприводом */
     BaseType_t task_created = xTaskCreate(servo_control_task,
                                           "servo_control_task",
                                           2048,                // Stack size

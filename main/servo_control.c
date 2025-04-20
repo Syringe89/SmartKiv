@@ -14,6 +14,7 @@
 #include "driver/ledc.h"
 #include "driver/gpio.h"
 #include "esp_zb_sleepy_end_device.h"
+#include "servo_control.h"
 #include "esp_sleep.h" // Добавляем для работы с режимами сна
 
 #define SERVO_GPIO (14)       // Servo GPIO
@@ -100,6 +101,15 @@ void servo_control_task(void *pvParameters)
         // Запрещаем сон Zigbee перед началом движения
         esp_zb_sleep_enable(false);
 
+        // Инициализируем сервопривод перед использованием
+        esp_err_t init_ret = servo_init();
+        if (init_ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to initialize servo, skipping operation");
+            esp_zb_sleep_enable(true); // Разрешаем сон, так как операция не будет выполнена
+            continue;                  // Пропускаем текущую итерацию
+        }
+
         // Включаем питание сервопривода
         servo_power_control(true);
 
@@ -133,6 +143,14 @@ void servo_control_task(void *pvParameters)
 
         // Выключаем питание сервопривода после завершения движения
         servo_power_control(false);
+
+        // Деинициализируем сервопривод для экономии энергии
+        esp_err_t deinit_ret = servo_deinit();
+        if (deinit_ret != ESP_OK)
+        {
+            ESP_LOGW(TAG, "Servo deinitialization failed: %s", esp_err_to_name(deinit_ret));
+            // Продолжаем выполнение, так как это некритичная ошибка
+        }
 
         // Разрешаем сон Zigbee после завершения движения
         esp_zb_sleep_enable(true);
@@ -199,4 +217,33 @@ esp_err_t servo_init(void)
     ESP_LOGI(TAG, "Servo control initialized. Waiting for task notification for initial position.");
 
     return ESP_OK; // Возвращаем ESP_OK, так как основная инициализация периферии завершена
+}
+
+esp_err_t servo_deinit(void)
+{
+    ESP_LOGI(TAG, "Deinitializing Servo Control...");
+
+    // Выключаем питание сервопривода
+    servo_power_control(false);
+
+    // Отключаем сервис fade
+    ledc_fade_func_uninstall();
+
+    // Отключаем ШИМ (останавливаем таймер LEDC)
+    esp_err_t ret = ledc_stop(LEDC_MODE, LEDC_CHANNEL, 0);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to stop LEDC: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    // Сбрасываем настройки GPIO для управления питанием
+    gpio_reset_pin(SERVO_POWER_GPIO);
+
+    // Сбрасываем настройки GPIO сервопривода
+    gpio_reset_pin(SERVO_GPIO);
+
+    ESP_LOGI(TAG, "Servo control deinitialized successfully.");
+
+    return ESP_OK;
 }

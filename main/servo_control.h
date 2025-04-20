@@ -15,4 +15,7 @@ esp_err_t servo_init(void);
 // Теперь будет ждать уведомления задачи (Task Notification)
 void servo_control_task(void *pvParameters);
 
+// Объявление функции деинициализации сервопривода
+esp_err_t servo_deinit(void);
+
 #endif // SERVO_CONTROL_H
