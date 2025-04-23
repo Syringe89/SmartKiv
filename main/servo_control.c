@@ -101,11 +101,15 @@ void servo_control_task(void *pvParameters)
         // Запрещаем сон Zigbee перед началом движения
         esp_zb_sleep_enable(false);
 
+        // Рассчитываем целевой угол и скважность сразу
+        uint16_t target_angle = open_cmd ? calibration_angle_open : calibration_angle_close;
+        uint32_t target_duty = servo_calculate_duty(target_angle);
+
         // --- Повторная инициализация LEDC перед использованием ---
-        // Сначала конфигурируем канал (привязываем GPIO)
-         ledc_channel_config_t ledc_channel_reinit = {
+        // Конфигурируем канал (привязываем GPIO) с целевым значением duty сразу
+        ledc_channel_config_t ledc_channel_reinit = {
             .channel = LEDC_CHANNEL,
-            .duty = 0,
+            .duty = target_duty, // Устанавливаем целевое значение сразу
             .gpio_num = SERVO_GPIO,
             .speed_mode = LEDC_MODE,
             .hpoint = 0,
@@ -114,10 +118,11 @@ void servo_control_task(void *pvParameters)
             .sleep_mode = LEDC_SLEEP_MODE_NO_ALIVE_ALLOW_PD // Используем безопасный режим
         };
         esp_err_t channel_ret = ledc_channel_config(&ledc_channel_reinit);
-        if (channel_ret != ESP_OK) {
-             ESP_LOGE(TAG, "Failed to re-initialize LEDC channel: %s", esp_err_to_name(channel_ret));
-             esp_zb_sleep_enable(true);
-             continue;
+        if (channel_ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to re-initialize LEDC channel: %s", esp_err_to_name(channel_ret));
+            esp_zb_sleep_enable(true);
+            continue;
         }
 
         // Настройка таймера LEDC (как в servo_init)
@@ -130,38 +135,34 @@ void servo_control_task(void *pvParameters)
             .deconfigure = false // Убедимся, что это инициализация
         };
         esp_err_t timer_ret = ledc_timer_config(&ledc_timer_reinit);
-         if (timer_ret != ESP_OK) {
+        if (timer_ret != ESP_OK)
+        {
             ESP_LOGE(TAG, "Failed to re-initialize LEDC timer: %s", esp_err_to_name(timer_ret));
             // Критическая ошибка, возможно, стоит перезагрузиться или остановить задачу
-             esp_zb_sleep_enable(true); // Разрешаем сон в случае ошибки
-            continue; 
+            esp_zb_sleep_enable(true); // Разрешаем сон в случае ошибки
+            continue;
         }
 
         // Инициализируем сервис fade (как в servo_init)
         esp_err_t fade_ret = ledc_fade_func_install(0);
         // Игнорируем ошибку ESP_ERR_INVALID_STATE, если он уже был установлен
-        if (fade_ret != ESP_OK && fade_ret != ESP_ERR_INVALID_STATE) {
-             ESP_LOGE(TAG, "Failed to install LEDC fade service: %s", esp_err_to_name(fade_ret));
-             // Обработка ошибки...
-             esp_zb_sleep_enable(true); // Разрешаем сон в случае ошибки
-             continue;
+        if (fade_ret != ESP_OK && fade_ret != ESP_ERR_INVALID_STATE)
+        {
+            ESP_LOGE(TAG, "Failed to install LEDC fade service: %s", esp_err_to_name(fade_ret));
+            // Обработка ошибки...
+            esp_zb_sleep_enable(true); // Разрешаем сон в случае ошибки
+            continue;
         }
         // --- Конец повторной инициализации LEDC ---
 
         // Убедимся, что таймер запущен перед операциями с каналом
         // (ledc_timer_config уже должен был его запустить, но resume не повредит)
         esp_err_t resume_ret = ledc_timer_resume(LEDC_MODE, LEDC_TIMER);
-        if (resume_ret != ESP_OK) {
+        if (resume_ret != ESP_OK)
+        {
             ESP_LOGW(TAG, "Failed to resume LEDC timer (maybe already running): %s", esp_err_to_name(resume_ret));
             // Не критично, если таймер уже запущен после config
         }
-
-        // Включаем питание сервопривода
-        servo_power_control(true);
-
-        // Рассчитываем целевой угол и скважность
-        uint16_t target_angle = open_cmd ? calibration_angle_open : calibration_angle_close;
-        uint32_t target_duty = servo_calculate_duty(target_angle);
 
         // Запускаем плавное изменение к target_duty
         esp_err_t ret = ledc_set_fade_with_time(LEDC_MODE, LEDC_CHANNEL,
@@ -177,6 +178,8 @@ void servo_control_task(void *pvParameters)
             if (ret != ESP_OK)
             {
                 ESP_LOGE(TAG, "Failed to start fade: %s", esp_err_to_name(ret));
+                // Включаем питание сервопривода
+                servo_power_control(true);
             }
             else
             {
@@ -193,14 +196,16 @@ void servo_control_task(void *pvParameters)
         // --- Полная деинициализация LEDC перед сном ---
         // Сначала останавливаем вывод на канале
         esp_err_t stop_ret = ledc_stop(LEDC_MODE, LEDC_CHANNEL, 0); // Устанавливаем idle_level в 0
-        if (stop_ret != ESP_OK) {
+        if (stop_ret != ESP_OK)
+        {
             ESP_LOGE(TAG, "Failed to stop LEDC channel: %s", esp_err_to_name(stop_ret));
             // Обработка ошибки...
         }
 
-        // Останавливаем таймер LEDC 
+        // Останавливаем таймер LEDC
         esp_err_t pause_ret = ledc_timer_pause(LEDC_MODE, LEDC_TIMER);
-         if (pause_ret != ESP_OK) {
+        if (pause_ret != ESP_OK)
+        {
             ESP_LOGE(TAG, "Failed to pause LEDC timer: %s", esp_err_to_name(pause_ret));
             // Возможно, стоит обработать ошибку более тщательно
         }
@@ -208,16 +213,16 @@ void servo_control_task(void *pvParameters)
         // Удаляем сервис fade
         ledc_fade_func_uninstall();
 
-         // Деконфигурируем таймер LEDC
+        // Деконфигурируем таймер LEDC
         ledc_timer_config_t ledc_timer_deinit = {
             .speed_mode = LEDC_MODE,
             .timer_num = LEDC_TIMER,
-            .deconfigure = true 
-        };
+            .deconfigure = true};
         esp_err_t deconfig_ret = ledc_timer_config(&ledc_timer_deinit);
-        if (deconfig_ret != ESP_OK) {
-             ESP_LOGE(TAG, "Failed to deconfigure LEDC timer: %s", esp_err_to_name(deconfig_ret));
-             // Обработка ошибки...
+        if (deconfig_ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to deconfigure LEDC timer: %s", esp_err_to_name(deconfig_ret));
+            // Обработка ошибки...
         }
 
         // Сбрасываем конфигурацию GPIO пина, чтобы отсоединить LEDC
