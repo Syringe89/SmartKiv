@@ -379,6 +379,8 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_zb_power_save_init());
     /* load Zigbee platform config to initialization */
     ESP_ERROR_CHECK(esp_zb_platform_config(&config));
+    // Инициализируем сервопривод перед использованием
+    ESP_ERROR_CHECK(servo_init());
 
     // Читаем сохраненное положение сервопривода из NVS в ЛОКАЛЬНУЮ переменную
     bool local_initial_servo_pos = false;              // Локальная переменная
@@ -409,7 +411,7 @@ void app_main(void)
     if (notify_result != pdPASS)
     {
         ESP_LOGW(TAG, "Failed to notify servo task for initial position (pdFAIL)");
-        // Не фатальная ошибка, но стоит залогировать
+        // Не фатальная ошибка, но стоит залогировать   
     }
 
     /* Создаем основную задачу Zigbee, передавая начальное положение как параметр */

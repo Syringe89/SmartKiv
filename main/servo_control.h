@@ -16,6 +16,6 @@ esp_err_t servo_init(void);
 void servo_control_task(void *pvParameters);
 
 // Объявление функции деинициализации сервопривода
-esp_err_t servo_deinit(void);
+// esp_err_t servo_deinit(void);
 
 #endif // SERVO_CONTROL_H
