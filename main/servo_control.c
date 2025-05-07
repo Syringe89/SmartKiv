@@ -1,9 +1,3 @@
-/*
- * SPDX-FileCopyrightText: 2024 Espressif Systems (Shanghai) CO LTD
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-
 #include <stdio.h>
 #include <math.h>
 #include "freertos/FreeRTOS.h"
@@ -18,26 +12,9 @@
 #include "servo_position_reader.h" // Добавляем заголовочный файл для чтения положения
 #include "esp_sleep.h"             // Добавляем для работы с режимами сна
 
-#define SERVO_GPIO (14)       // Servo GPIO
-#define SERVO_POWER_GPIO (13) // GPIO для управления питанием сервопривода
-
 // Углы для калибровки
-static uint16_t calibration_angle_close = 0;  // Угол для закрытого положения (градусы)
-static uint16_t calibration_angle_open = 360; // Угол для открытого положения (градусы)
-
-// Параметры сервопривода
-#define SERVO_MAX_ANGLE 180
-#define SERVO_MIN_WIDTH_US 500
-#define SERVO_MAX_WIDTH_US 2500
-#define SERVO_FREQ 50
-#define LEDC_TIMER LEDC_TIMER_0
-#define LEDC_CHANNEL LEDC_CHANNEL_0
-#define LEDC_MODE LEDC_LOW_SPEED_MODE
-#define LEDC_DUTY_RESOLUTION LEDC_TIMER_10_BIT
-#define LEDC_MAX_DUTY ((1 << LEDC_DUTY_RESOLUTION) - 1)
-
-// Время для плавного перехода (2 секунды)
-#define SERVO_FADE_TIME_MS 2000
+static uint16_t calibration_angle_close = SERVO_MIN_ANGLE; // Угол для закрытого положения (градусы)
+static uint16_t calibration_angle_open = SERVO_MAX_ANGLE;  // Угол для открытого положения (градусы)
 
 // Функция для расчета скважности по углу
 static uint32_t servo_calculate_duty(uint16_t angle)
@@ -46,6 +23,11 @@ static uint32_t servo_calculate_duty(uint16_t angle)
     if (angle > SERVO_MAX_ANGLE)
     {
         angle = SERVO_MAX_ANGLE;
+    }
+
+    if (angle < SERVO_MIN_ANGLE)
+    {
+        angle = SERVO_MIN_ANGLE;
     }
 
     // Рассчитываем длительность импульса для заданного угла
