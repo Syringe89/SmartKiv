@@ -144,8 +144,8 @@ void esp_zb_app_signal_handler(esp_zb_app_signal_t *signal_struct)
         }
         break;
     case ESP_ZB_COMMON_SIGNAL_CAN_SLEEP:
-        ESP_LOGI(TAG, "Zigbee can sleep");
-        esp_zb_sleep_now();
+        // ESP_LOGI(TAG, "Zigbee can sleep");
+        // esp_zb_sleep_now();
         break;
     default:
         ESP_LOGI(TAG, "ZDO signal: %s (0x%x), status: %s", esp_zb_zdo_signal_to_string(sig_type), sig_type, esp_err_to_name(err_status));
@@ -162,7 +162,7 @@ static esp_err_t esp_zb_power_save_init(void)
         .max_freq_mhz = cur_cpu_freq_mhz,
         .min_freq_mhz = cur_cpu_freq_mhz,
 #if CONFIG_FREERTOS_USE_TICKLESS_IDLE
-        .light_sleep_enable = true
+        .light_sleep_enable = false
 #endif
     };
     rc = esp_pm_configure(&pm_config);
@@ -390,7 +390,7 @@ void app_main(void)
     /* Создаем задачу управления сервоприводом */
     BaseType_t task_created = xTaskCreate(servo_control_task,
                                           "servo_control_task",
-                                          2048,                // Stack size
+                                          4096,                // Stack size
                                           NULL,                // pvParameters
                                           5,                   // Priority
                                           &servo_task_handle); // Task handle output
