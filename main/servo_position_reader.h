@@ -13,22 +13,25 @@
 #define SERVO_POSITION_ADC_UNIT ADC_UNIT_1
 #define SERVO_POSITION_ADC_CHANNEL ADC_CHANNEL_2
 #define SERVO_POSITION_ENABLE_PIN GPIO_NUM_12
-#define ADC_MAX_VALUE 4095  // 12-bit ADC
+#define ADC_RESOLUTION ADC_BITWIDTH_12          // 12-bit ADC
+#define ADC_MAX_VALUE (1 << ADC_RESOLUTION) - 1 // 12-bit ADC VALUE
+#define ADC_ATTEN ADC_ATTEN_DB_12               // Аттенюация 12dB для измерения до 3.3В
 #define POSITION_READING_STABILIZATION_TIME_MS 10
 
 // Структура для хранения настроек модуля чтения положения
-typedef struct {
-    float angle_min;                  // Минимальный угол сервопривода (градусы)
-    float angle_max;                  // Максимальный угол сервопривода (градусы)
-    float voltage_min;                // Напряжение при минимальном угле (мВ)
-    float voltage_max;                // Напряжение при максимальном угле (мВ)
-    bool use_voltage_divider;         // Использовать ли делитель напряжения
-    float voltage_divider_factor;     // Коэффициент делителя напряжения
-    bool use_enable_pin;              // Использовать ли пин активации
-    gpio_num_t enable_pin;            // Номер пина активации
-    bool enable_level;                // Уровень активации (true = HIGH, false = LOW)
-    adc_oneshot_unit_handle_t adc_handle;  // Handle АЦП
-    adc_cali_handle_t adc_cali_handle;     // Handle калибровки АЦП
+typedef struct
+{
+    float angle_min;                      // Минимальный угол сервопривода (градусы)
+    float angle_max;                      // Максимальный угол сервопривода (градусы)
+    float voltage_min;                    // Напряжение при минимальном угле (мВ)
+    float voltage_max;                    // Напряжение при максимальном угле (мВ)
+    bool use_voltage_divider;             // Использовать ли делитель напряжения
+    float voltage_divider_factor;         // Коэффициент делителя напряжения
+    bool use_enable_pin;                  // Использовать ли пин активации
+    gpio_num_t enable_pin;                // Номер пина активации
+    bool enable_level;                    // Уровень активации (true = HIGH, false = LOW)
+    adc_oneshot_unit_handle_t adc_handle; // Handle АЦП
+    adc_cali_handle_t adc_cali_handle;    // Handle калибровки АЦП
 } servo_position_reader_config_t;
 
 // Инициализация модуля чтения положения сервопривода
@@ -49,4 +52,4 @@ esp_err_t servo_position_reader_get_raw(int *raw_value);
 // Деинициализация модуля
 esp_err_t servo_position_reader_deinit(void);
 
-#endif // SERVO_POSITION_READER_H 
+#endif // SERVO_POSITION_READER_H

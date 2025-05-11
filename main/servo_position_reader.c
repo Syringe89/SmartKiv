@@ -17,9 +17,9 @@ static bool reading_enabled = false;
 esp_err_t servo_position_reader_init(void)
 {
     // Инициализация модуля чтения положения сервопривода
-    config.angle_min = SERVO_MIN_ANGLE;      // Минимальный угол сервопривода (0 градусов)
-    config.angle_max = SERVO_MAX_ANGLE;    // Максимальный угол сервопривода (180 градусов)
-    config.voltage_min = SERVO_MIN_VOLTAGE_MV;    // Напряжение при минимальном угле (мВ)
+    config.angle_min = SERVO_MIN_ANGLE;        // Минимальный угол сервопривода (0 градусов)
+    config.angle_max = SERVO_MAX_ANGLE;        // Максимальный угол сервопривода (360 градусов)
+    config.voltage_min = SERVO_MIN_VOLTAGE_MV; // Напряжение при минимальном угле (мВ)
     config.voltage_max = SERVO_MAX_VOLTAGE_MV; // Напряжение при максимальном угле (мВ)
 
     // Настройка делителя напряжения
@@ -55,8 +55,8 @@ esp_err_t servo_position_reader_init(void)
 
     // Настройка канала АЦП
     adc_oneshot_chan_cfg_t chan_config = {
-        .bitwidth = ADC_BITWIDTH_12, // 12-битное разрешение
-        .atten = ADC_ATTEN_DB_12,    // Аттенюация 12dB для измерения до 3.3В
+        .bitwidth = ADC_RESOLUTION, // 12-битное разрешение
+        .atten = ADC_ATTEN,         // Аттенюация 12dB для измерения до 3.3В
     };
 
     ret = adc_oneshot_config_channel(config.adc_handle, SERVO_POSITION_ADC_CHANNEL, &chan_config);
@@ -72,8 +72,8 @@ esp_err_t servo_position_reader_init(void)
     adc_cali_curve_fitting_config_t cali_config = {
         .unit_id = SERVO_POSITION_ADC_UNIT,
         .chan = SERVO_POSITION_ADC_CHANNEL,
-        .atten = ADC_ATTEN_DB_12,
-        .bitwidth = ADC_BITWIDTH_12,
+        .bitwidth = ADC_RESOLUTION,
+        .atten = ADC_ATTEN,
     };
     ret = adc_cali_create_scheme_curve_fitting(&cali_config, &adc_cali_handle);
     if (ret == ESP_OK)
