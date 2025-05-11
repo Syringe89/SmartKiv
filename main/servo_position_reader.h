@@ -16,9 +16,6 @@
 #define ADC_MAX_VALUE 4095  // 12-bit ADC
 #define POSITION_READING_STABILIZATION_TIME_MS 10
 
-// Максимальное напряжение сервопривода (4.2В)
-#define SERVO_MAX_VOLTAGE_MV        3300
-
 // Структура для хранения настроек модуля чтения положения
 typedef struct {
     float angle_min;                  // Минимальный угол сервопривода (градусы)

@@ -1,4 +1,5 @@
 #include "servo_position_reader.h"
+#include "servo_control.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -16,10 +17,10 @@ static bool reading_enabled = false;
 esp_err_t servo_position_reader_init(void)
 {
     // Инициализация модуля чтения положения сервопривода
-    config.angle_min = 0.0f;      // Минимальный угол сервопривода (0 градусов)
-    config.angle_max = 360.0f;    // Максимальный угол сервопривода (180 градусов)
-    config.voltage_min = 0.0f;    // Напряжение при минимальном угле (мВ)
-    config.voltage_max = 3300.0f; // Напряжение при максимальном угле (мВ)
+    config.angle_min = SERVO_MIN_ANGLE;      // Минимальный угол сервопривода (0 градусов)
+    config.angle_max = SERVO_MAX_ANGLE;    // Максимальный угол сервопривода (180 градусов)
+    config.voltage_min = SERVO_MIN_VOLTAGE_MV;    // Напряжение при минимальном угле (мВ)
+    config.voltage_max = SERVO_MAX_VOLTAGE_MV; // Напряжение при максимальном угле (мВ)
 
     // Настройка делителя напряжения
     // Например, для R1=10 кОм, R2=15 кОм: (10 + 15) / 15 = 1.67
