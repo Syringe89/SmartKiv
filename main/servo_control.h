@@ -27,8 +27,8 @@
 #define SERVO_MIN_FADE_TIME_MS 500         // Минимальное время перехода (мс)
 #define SERVO_MAX_FADE_TIME_MS 6000        // Максимальное время перехода (мс)
 
-// Объявление функции инициализации сервопривода
-esp_err_t servo_init(void);
+// // Объявление функции инициализации сервопривода
+// esp_err_t servo_init(void);
 
 // Объявление задачи управления сервоприводом
 void servo_control_task(void *pvParameters);

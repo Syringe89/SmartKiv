@@ -19,7 +19,7 @@ static float calibration_angle_open = SERVO_MAX_ANGLE;  // Угол для от�
 // Функция для расчета скважности по углу
 static uint32_t servo_calculate_duty(float angle)
 {
-    ESP_LOGI(TAG, "Начало расчета duty для угла: %.2f градусов", angle);
+    ESP_LOGI(TAG, "Начало расчета скважности для угла: %.2f градусов", angle);
     
     // Ограничиваем угол, чтобы избежать выхода за пределы
     if (angle > SERVO_MAX_ANGLE)
@@ -74,7 +74,7 @@ static uint32_t servo_calculate_duty(float angle)
 // Функция для инициализации LEDC
 static esp_err_t ledc_init(uint32_t target_duty)
 {
-    ESP_LOGI(TAG, "Инициализация LEDC с target_duty=%lu", target_duty);
+    ESP_LOGI(TAG, "Инициализация LEDC с целевой скважностью=%lu", target_duty);
 
     // Сначала конфигурируем таймер LEDC
     ledc_timer_config_t ledc_timer_reinit = {
@@ -88,7 +88,7 @@ static esp_err_t ledc_init(uint32_t target_duty)
     esp_err_t timer_ret = ledc_timer_config(&ledc_timer_reinit);
     if (timer_ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to re-initialize LEDC timer: %s", esp_err_to_name(timer_ret));
+        ESP_LOGE(TAG, "Ошибка повторной инициализации таймера LEDC: %s", esp_err_to_name(timer_ret));
         return timer_ret;
     }
 
@@ -96,7 +96,7 @@ static esp_err_t ledc_init(uint32_t target_duty)
     esp_err_t resume_ret = ledc_timer_resume(LEDC_MODE, LEDC_TIMER);
     if (resume_ret != ESP_OK)
     {
-        ESP_LOGW(TAG, "Failed to resume LEDC timer (maybe already running): %s", esp_err_to_name(resume_ret));
+        ESP_LOGW(TAG, "Не удалось возобновить таймер LEDC (возможно, уже запущен): %s", esp_err_to_name(resume_ret));
         // Не критично, если таймер уже запущен после config
     }
 
@@ -114,7 +114,7 @@ static esp_err_t ledc_init(uint32_t target_duty)
     esp_err_t channel_ret = ledc_channel_config(&ledc_channel_reinit);
     if (channel_ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to re-initialize LEDC channel: %s", esp_err_to_name(channel_ret));
+        ESP_LOGE(TAG, "Ошибка повторной инициализации канала LEDC: %s", esp_err_to_name(channel_ret));
         return channel_ret;
     }
 
@@ -123,7 +123,7 @@ static esp_err_t ledc_init(uint32_t target_duty)
     // Игнорируем ошибку ESP_ERR_INVALID_STATE, если он уже был установлен
     if (fade_ret != ESP_OK && fade_ret != ESP_ERR_INVALID_STATE)
     {
-        ESP_LOGE(TAG, "Failed to install LEDC fade service: %s", esp_err_to_name(fade_ret));
+        ESP_LOGE(TAG, "Ошибка установки сервиса плавного изменения LEDC: %s", esp_err_to_name(fade_ret));
         return fade_ret;
     }
 
@@ -131,11 +131,11 @@ static esp_err_t ledc_init(uint32_t target_duty)
     esp_err_t update_ret = ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
     if (update_ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to update LEDC duty: %s", esp_err_to_name(update_ret));
+        ESP_LOGE(TAG, "Ошибка обновления скважности LEDC: %s", esp_err_to_name(update_ret));
         return update_ret;
     }
     
-    ESP_LOGI(TAG, "LEDC успешно инициализирован с duty=%lu", target_duty);
+    ESP_LOGI(TAG, "LEDC успешно инициализирован со скважностью=%lu", target_duty);
     
     // Добавляем небольшую задержку для применения настроек
     vTaskDelay(pdMS_TO_TICKS(20));
@@ -150,7 +150,7 @@ static esp_err_t ledc_deinit(void)
     esp_err_t stop_ret = ledc_stop(LEDC_MODE, LEDC_CHANNEL, 0); // Устанавливаем idle_level в 0
     if (stop_ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to stop LEDC channel: %s", esp_err_to_name(stop_ret));
+        ESP_LOGE(TAG, "Ошибка остановки канала LEDC: %s", esp_err_to_name(stop_ret));
         return stop_ret;
     }
 
@@ -158,7 +158,7 @@ static esp_err_t ledc_deinit(void)
     esp_err_t pause_ret = ledc_timer_pause(LEDC_MODE, LEDC_TIMER);
     if (pause_ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to pause LEDC timer: %s", esp_err_to_name(pause_ret));
+        ESP_LOGE(TAG, "Ошибка приостановки таймера LEDC: %s", esp_err_to_name(pause_ret));
         return pause_ret;
     }
 
@@ -173,7 +173,7 @@ static esp_err_t ledc_deinit(void)
     esp_err_t deconfig_ret = ledc_timer_config(&ledc_timer_deinit);
     if (deconfig_ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to deconfigure LEDC timer: %s", esp_err_to_name(deconfig_ret));
+        ESP_LOGE(TAG, "Ошибка деконфигурации таймера LEDC: %s", esp_err_to_name(deconfig_ret));
         return deconfig_ret;
     }
 
@@ -212,8 +212,8 @@ void servo_control_task(void *pvParameters)
     uint32_t notificationValue;
     bool open_cmd;
 
-    ESP_LOGI(TAG, "Servo control task started, waiting for notifications.");
-    ESP_LOGI(TAG, "Target angles - Close: %.2f, Open: %.2f",
+    ESP_LOGI(TAG, "Задача управления сервоприводом запущена, ожидание уведомлений.");
+    ESP_LOGI(TAG, "Целевые углы - Закрыто: %.2f, Открыто: %.2f",
              calibration_angle_close, calibration_angle_open);
 
     for (;;)
@@ -221,7 +221,7 @@ void servo_control_task(void *pvParameters)
         notificationValue = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         open_cmd = (bool)notificationValue;
 
-        ESP_LOGI(TAG, "Servo notification received: %s", open_cmd ? "Open" : "Close");
+        ESP_LOGI(TAG, "Получено уведомление для сервопривода: %s", open_cmd ? "Открыть" : "Закрыть");
 
         // Запрещаем сон Zigbee перед началом движения
         esp_zb_sleep_enable(false);
@@ -234,7 +234,7 @@ void servo_control_task(void *pvParameters)
         esp_err_t init_ret = servo_position_reader_init();
         if (init_ret != ESP_OK)
         {
-            ESP_LOGE(TAG, "ADC initialization failed");
+            ESP_LOGE(TAG, "Ошибка инициализации АЦП");
             esp_zb_sleep_enable(true);
             continue;
         }
@@ -252,37 +252,36 @@ void servo_control_task(void *pvParameters)
 
         // Чтение угла сервопривода
         // Определяем текущее положение сервопривода
-        float angle = 0.0f;
-        esp_err_t angle_ret = ESP_OK;
-        angle_ret = servo_position_reader_get_angle(&angle);
+        float current_angle;
+        esp_err_t angle_ret = servo_position_reader_get_angle(&current_angle);
 
         uint32_t current_duty = 0;
 
         if (angle_ret == ESP_OK)
         {
             // Если успешно получили угол, используем его для расчета текущей скважности
-            current_duty = servo_calculate_duty(angle);
-            ESP_LOGI(TAG, "Current servo angle: %.2f (duty: %lu)", angle, current_duty);
+            current_duty = servo_calculate_duty(current_angle);
+            ESP_LOGI(TAG, "Текущий угол сервопривода: %.2f (скважность: %lu)", current_angle, current_duty);
         }
         else
         {
             // В случае ошибки используем безопасное начальное значение
-            ESP_LOGW(TAG, "Failed to read current servo angle: %s", esp_err_to_name(angle_ret));
+            ESP_LOGW(TAG, "Не удалось прочитать текущий угол сервопривода: %s", esp_err_to_name(angle_ret));
             // Используем закрытое положение как безопасное начальное
-            current_duty = servo_calculate_duty(calibration_angle_close);
+            current_angle = calibration_angle_close;
+            current_duty = servo_calculate_duty(current_angle);
         }
 
         // Инициализируем LEDC с текущим значением скважности
         init_ret = ledc_init(current_duty);
-        if (ret != ESP_OK)
+        if (init_ret != ESP_OK)
         {
-            ESP_LOGE(TAG, "LEDC initialization failed");
+            ESP_LOGE(TAG, "Ошибка инициализации LEDC");
             esp_zb_sleep_enable(true);
             continue;
         }
 
-        // Рассчитываем время перехода только на основе разницы углов
-        float current_angle = (angle_ret == ESP_OK) ? angle : calibration_angle_close;
+        // Рассчитываем время перехода на основе разницы углов
         uint32_t fade_time_ms = calculate_servo_fade_time(current_angle, target_angle);
 
         // Запускаем плавное изменение от текущей позиции к целевой
@@ -291,24 +290,24 @@ void servo_control_task(void *pvParameters)
                                       fade_time_ms);
         if (ret != ESP_OK)
         {
-            ESP_LOGE(TAG, "Failed to set fade: %s", esp_err_to_name(ret));
+            ESP_LOGE(TAG, "Ошибка установки плавного изменения: %s", esp_err_to_name(ret));
         }
         else
         {
             ret = ledc_fade_start(LEDC_MODE, LEDC_CHANNEL, LEDC_FADE_NO_WAIT);
             if (ret != ESP_OK)
             {
-                ESP_LOGE(TAG, "Failed to start fade: %s", esp_err_to_name(ret));
+                ESP_LOGE(TAG, "Ошибка запуска плавного изменения: %s", esp_err_to_name(ret));
             }
             else
             {
-                ESP_LOGI(TAG, "Servo fade from %.2f° to %.2f° (Duty: %lu->%lu) initiated with time: %lu мс.",
+                ESP_LOGI(TAG, "Плавное изменение сервопривода с %.2f° на %.2f° (Скважность: %lu->%lu) запущено со временем: %lu мс.",
                          current_angle, target_angle, current_duty, target_duty, fade_time_ms);
             }
         }
 
         // Ждем завершения fade
-        vTaskDelay(pdMS_TO_TICKS(fade_time_ms + 100)); // Задержка = рассчитанному времени fade + 100мс запас
+        vTaskDelay(pdMS_TO_TICKS(fade_time_ms + 100)); // Задержка = рассчётное время fade + 100мс запас
 
         // Деактивируем схему чтения после получения значения
         ret = servo_position_set_reading_enabled(false);
@@ -325,14 +324,14 @@ void servo_control_task(void *pvParameters)
         esp_err_t deinit_ret = ledc_deinit();
         if (deinit_ret != ESP_OK)
         {
-            ESP_LOGE(TAG, "LEDC deinitialization failed");
+            ESP_LOGE(TAG, "Ошибка деинициализации LEDC");
         }
 
         // Деинициализируем ADC перед сном
         deinit_ret = servo_position_reader_deinit();
         if (deinit_ret != ESP_OK)
         {
-            ESP_LOGE(TAG, "ADC deinitialization failed");
+            ESP_LOGE(TAG, "Ошибка деинициализации АЦП");
         }
 
         // Разрешаем сон Zigbee после завершения движения
@@ -340,30 +339,30 @@ void servo_control_task(void *pvParameters)
     }
 }
 
-esp_err_t servo_init(void)
-{
-    ESP_LOGI(TAG, "Initializing Servo Control...");
+// esp_err_t servo_init(void)
+// {
+//     ESP_LOGI(TAG, "Инициализация управления сервоприводом...");
 
-    // Настройка GPIO для управления питанием сервопривода
-    gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << SERVO_POWER_GPIO),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE};
+//     // Настройка GPIO для управления питанием сервопривода
+//     gpio_config_t io_conf = {
+//         .pin_bit_mask = (1ULL << SERVO_POWER_GPIO),
+//         .mode = GPIO_MODE_OUTPUT,
+//         .pull_up_en = GPIO_PULLUP_DISABLE,
+//         .pull_down_en = GPIO_PULLDOWN_DISABLE,
+//         .intr_type = GPIO_INTR_DISABLE};
 
-    esp_err_t ret = gpio_config(&io_conf);
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Failed to configure servo power GPIO: %s", esp_err_to_name(ret));
-        return ret;
-    }
+//     esp_err_t ret = gpio_config(&io_conf);
+//     if (ret != ESP_OK)
+//     {
+//         ESP_LOGE(TAG, "Ошибка настройки GPIO питания сервопривода: %s", esp_err_to_name(ret));
+//         return ret;
+//     }
 
-    // Изначально питание выключено
-    gpio_set_level(SERVO_POWER_GPIO, 0);
-    ESP_LOGI(TAG, "Servo power GPIO initialized");
+//     // // Изначально питание выключено
+//     // gpio_set_level(SERVO_POWER_GPIO, 0);
+//     // ESP_LOGI(TAG, "GPIO питания сервопривода инициализирован");
 
-    ESP_LOGI(TAG, "Servo control initialized. Waiting for task notification for initial position.");
+//     ESP_LOGI(TAG, "Управление сервоприводом инициализировано. Ожидание уведомления задачи для начальной позиции.");
 
-    return ESP_OK; // Возвращаем ESP_OK, так как основная инициализация периферии завершена
-}
+//     return ESP_OK; // Возвращаем ESP_OK, так как основная инициализация периферии завершена
+// }
