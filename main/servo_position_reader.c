@@ -347,3 +347,31 @@ esp_err_t servo_position_reader_deinit(void)
 
     return ESP_OK;
 }
+
+// Установка параметров калибровки для модуля чтения положения
+esp_err_t servo_position_reader_set_params(float angle_min, float angle_max, 
+                                          float voltage_min, float voltage_max)
+{
+    if (!is_initialized) {
+        ESP_LOGE(TAG, "Модуль не инициализирован");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    // Проверка корректности параметров
+    if (angle_min >= angle_max || voltage_min >= voltage_max) {
+        ESP_LOGE(TAG, "Некорректные параметры калибровки: min_angle=%.2f, max_angle=%.2f, min_voltage=%.2f, max_voltage=%.2f",
+                angle_min, angle_max, voltage_min, voltage_max);
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    // Обновляем параметры
+    config.angle_min = angle_min;
+    config.angle_max = angle_max;
+    config.voltage_min = voltage_min;
+    config.voltage_max = voltage_max;
+    
+    ESP_LOGI(TAG, "Параметры калибровки обновлены: min_angle=%.2f, max_angle=%.2f, min_voltage=%.2f мВ, max_voltage=%.2f мВ",
+            config.angle_min, config.angle_max, config.voltage_min, config.voltage_max);
+    
+    return ESP_OK;
+}

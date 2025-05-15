@@ -12,6 +12,9 @@
  * CONDITIONS OF ANY KIND, either express or implied.
  */
 
+#ifndef ESP_ZB_SLEEPY_END_DEVICE_H
+#define ESP_ZB_SLEEPY_END_DEVICE_H
+
 #include "esp_zigbee_core.h"
 #include "zcl_utility.h"
 
@@ -25,8 +28,9 @@
 /* Power source defines */
 #define ZB_POWER_SOURCE_BATTERY 0x03 /* ZCL Power Source value for Battery */
 
-#define NVS_NAMESPACE "storage"
-#define NVS_KEY "servo_pos"
+#define NVS_NAMESPACE "servo"
+#define NVS_KEY "position"
+#define NVS_KEY_CALIBRATION "calibration"
 
 /* --- ДОБАВЛЕНО --- */
 #define TAG "ESP_ZB_SLEEP" /* Log tag for the main application */
@@ -56,3 +60,14 @@
     {                                                         \
         .host_connection_mode = ZB_HOST_CONNECTION_MODE_NONE, \
     }
+
+/* Константы для времени сна */
+#define DEFAULT_SLEEP_TIME_SEC 60
+
+/* Фукнции обработки сигналов Zigbee */
+void esp_zb_app_signal_handler(esp_zb_app_signal_t *signal_struct);
+
+/* Функция запуска калибровки сервопривода */
+esp_err_t run_servo_calibration(void);
+
+#endif // ESP_ZB_SLEEPY_END_DEVICE_H

@@ -2,6 +2,7 @@
 #define SERVO_CONTROL_H
 
 #include "esp_err.h" // Для esp_err_t
+#include "driver/ledc.h" // Для доступа к функциям LEDC
 
 #define SERVO_GPIO (14)       // Servo GPIO
 #define SERVO_POWER_GPIO (13) // GPIO для управления питанием сервопривода
@@ -27,8 +28,8 @@
 #define SERVO_MIN_FADE_TIME_MS 500         // Минимальное время перехода (мс)
 #define SERVO_MAX_FADE_TIME_MS 6000        // Максимальное время перехода (мс)
 
-// // Объявление функции инициализации сервопривода
-// esp_err_t servo_init(void);
+// Функция для расчета скважности по углу
+uint32_t servo_calculate_duty(float angle);
 
 // Объявление задачи управления сервоприводом
 void servo_control_task(void *pvParameters);

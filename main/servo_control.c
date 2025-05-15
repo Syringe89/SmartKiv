@@ -12,12 +12,14 @@
 #include "servo_position_reader.h" // Добавляем заголовочный файл для чтения положения
 #include "esp_sleep.h"             // Добавляем для работы с режимами сна
 
+static const char *TAG = "SERVO_CTRL";
+
 // Углы для калибровки
 static float calibration_angle_close = SERVO_MIN_ANGLE; // Угол для закрытого положения (градусы)
 static float calibration_angle_open = SERVO_MAX_ANGLE;  // Угол для открытого положения (градусы)
 
 // Функция для расчета скважности по углу
-static uint32_t servo_calculate_duty(float angle)
+uint32_t servo_calculate_duty(float angle)
 {
     ESP_LOGI(TAG, "Начало расчета скважности для угла: %.2f градусов", angle);
     

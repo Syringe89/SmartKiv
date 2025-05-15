@@ -52,4 +52,8 @@ esp_err_t servo_position_reader_get_raw(int *raw_value);
 // Деинициализация модуля
 esp_err_t servo_position_reader_deinit(void);
 
+// Установка параметров калибровки для модуля чтения положения
+esp_err_t servo_position_reader_set_params(float angle_min, float angle_max, 
+                                          float voltage_min, float voltage_max);
+
 #endif // SERVO_POSITION_READER_H
