@@ -10,9 +10,9 @@
 
 // Параметры сервопривода
 #define SERVO_MIN_ANGLE 0
-#define SERVO_MAX_ANGLE 180
+#define SERVO_MAX_ANGLE 120
 #define SERVO_MIN_WIDTH_US 500
-#define SERVO_MAX_WIDTH_US 2500
+#define SERVO_MAX_WIDTH_US 2000
 #define SERVO_MIN_VOLTAGE_MV 669
 #define SERVO_MAX_VOLTAGE_MV 2615
 #define SERVO_FREQ 50
@@ -34,6 +34,9 @@ uint32_t servo_calculate_duty(float angle);
 // Объявление задачи управления сервоприводом
 void servo_control_task(void *pvParameters);
 
-// Объявление функции деинициализации сервопривода
+// Объявление функции инициализации LEDC
+esp_err_t ledc_init(uint32_t target_duty);
 
+// Объявление функции деинициализации сервопривода
+esp_err_t ledc_deinit(void);
 #endif // SERVO_CONTROL_H

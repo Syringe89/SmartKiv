@@ -94,7 +94,7 @@ bool switch_driver_init(switch_func_pair_t *button_func_pairs, uint8_t pair_len,
     BaseType_t task_created = xTaskCreate(
         switch_task,        // Функция задачи
         "switch_task",      // Имя задачи
-        2048,               // Размер стека
+        4096,               // Размер стека
         NULL,               // Параметры
         5,                  // Приоритет
         &g_switch_task_handle // Хэндл задачи

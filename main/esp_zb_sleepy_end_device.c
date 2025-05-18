@@ -46,6 +46,15 @@
 // Хэндл для задачи управления сервоприводом
 static TaskHandle_t servo_task_handle = NULL;
 
+/* Log tag for the main application */
+static const char *TAG = "ESP_ZB_SLEEP";
+
+// Прототипы функций
+static esp_err_t nvs_write_servo_position(bool position);
+static esp_err_t nvs_read_servo_position(bool *position);
+static esp_err_t nvs_save_calibration_results(const servo_calibration_result_t *result);
+static esp_err_t nvs_load_calibration_results(servo_calibration_result_t *result);
+
 static switch_func_pair_t button_func_pair[] = {
     {CONFIG_GPIO_INPUT_IO_WAKEUP, SWITCH_ONOFF_TOGGLE_CONTROL}};
 
@@ -53,7 +62,7 @@ static void zb_buttons_handler(switch_func_pair_t *button_func_pair)
 {
     static TickType_t button_press_time = 0;
     static bool calibration_mode = false;
-    
+
     if (button_func_pair->func == SWITCH_ONOFF_TOGGLE_CONTROL)
     {
         if (switch_driver_is_pressed(button_func_pair))
@@ -67,16 +76,17 @@ static void zb_buttons_handler(switch_func_pair_t *button_func_pair)
             // Кнопка отпущена, вычисляем время нажатия
             TickType_t press_duration = xTaskGetTickCount() - button_press_time;
             button_press_time = 0;
-            
-            // Если кнопка удерживалась более 5 секунд
-            if (press_duration > pdMS_TO_TICKS(5000) && !calibration_mode)
+
+            // Если кнопка удерживалась более 3 секунд
+            if (press_duration > pdMS_TO_TICKS(3000) && !calibration_mode)
             {
                 calibration_mode = true;
                 ESP_LOGI(TAG, "Длительное нажатие кнопки - запуск калибровки сервопривода");
-                
+
                 // Запускаем калибровку
                 esp_err_t ret = run_servo_calibration();
-                if (ret != ESP_OK) {
+                if (ret != ESP_OK)
+                {
                     ESP_LOGE(TAG, "Ошибка запуска калибровки: %s", esp_err_to_name(ret));
                 }
             }
@@ -420,24 +430,24 @@ void app_main(void)
     bool local_initial_servo_pos = false;              // Локальная переменная
     nvs_read_servo_position(&local_initial_servo_pos); // Читаем в локальную переменную
 
-    // Инициализируем модуль чтения положения сервопривода
-    esp_err_t ret = servo_position_reader_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Ошибка инициализации модуля чтения положения сервопривода: %s", esp_err_to_name(ret));
-    } else {
-        // Загружаем и применяем данные калибровки, если они доступны
-        servo_calibration_result_t calib_result;
-        ret = nvs_load_calibration_results(&calib_result);
-        if (ret == ESP_OK && calib_result.calibration_valid) {
-            ret = servo_calibration_apply_results(&calib_result);
-            if (ret != ESP_OK) {
-                ESP_LOGW(TAG, "Ошибка применения данных калибровки: %s", esp_err_to_name(ret));
-            } else {
-                ESP_LOGI(TAG, "Данные калибровки успешно применены");
-            }
-        } else {
-            ESP_LOGW(TAG, "Данные калибровки не найдены или недействительны. Используются значения по умолчанию.");
+    // Загружаем и применяем данные калибровки, если они доступны
+    servo_calibration_result_t calib_result;
+    esp_err_t ret = nvs_load_calibration_results(&calib_result);
+    if (ret == ESP_OK && calib_result.calibration_valid)
+    {
+        ret = servo_calibration_apply_results(&calib_result);
+        if (ret != ESP_OK)
+        {
+            ESP_LOGW(TAG, "Ошибка применения данных калибровки: %s", esp_err_to_name(ret));
         }
+        else
+        {
+            ESP_LOGI(TAG, "Данные калибровки успешно применены");
+        }
+    }
+    else
+    {
+        ESP_LOGW(TAG, "Данные калибровки не найдены или недействительны. Используются значения по умолчанию.");
     }
 
     /* Не инициализируем сервопривод при старте - он будет инициализирован при использовании */
@@ -465,7 +475,7 @@ void app_main(void)
     if (notify_result != pdPASS)
     {
         ESP_LOGW(TAG, "Failed to notify servo task for initial position (pdFAIL)");
-        // Не фатальная ошибка, но стоит залогировать   
+        // Не фатальная ошибка, но стоит залогировать
     }
 
     /* Создаем основную задачу Zigbee, передавая начальное положение как параметр */
@@ -484,63 +494,75 @@ void app_main(void)
 }
 
 // Функция для сохранения результатов калибровки в NVS
-static esp_err_t nvs_save_calibration_results(const servo_calibration_result_t *result) 
+static esp_err_t nvs_save_calibration_results(const servo_calibration_result_t *result)
 {
-    if (!result || !result->calibration_valid) {
+    if (!result || !result->calibration_valid)
+    {
         return ESP_ERR_INVALID_ARG;
     }
-    
+
     nvs_handle_t nvs_handle;
     esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "Ошибка (%s) открытия NVS!", esp_err_to_name(err));
         return err;
     }
-    
-    // Сохраняем каждое значение отдельно
-    err = nvs_set_float(nvs_handle, "min_angle", result->min_angle);
-    if (err != ESP_OK) {
+
+    // Сохраняем каждое значение отдельно как blob
+    float value = result->min_angle;
+    err = nvs_set_blob(nvs_handle, "min_angle", &value, sizeof(float));
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "Ошибка (%s) при записи min_angle!", esp_err_to_name(err));
         nvs_close(nvs_handle);
         return err;
     }
-    
-    err = nvs_set_float(nvs_handle, "max_angle", result->max_angle);
-    if (err != ESP_OK) {
+
+    value = result->max_angle;
+    err = nvs_set_blob(nvs_handle, "max_angle", &value, sizeof(float));
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "Ошибка (%s) при записи max_angle!", esp_err_to_name(err));
         nvs_close(nvs_handle);
         return err;
     }
-    
-    err = nvs_set_float(nvs_handle, "min_voltage", result->min_voltage_mv);
-    if (err != ESP_OK) {
+
+    value = result->min_voltage_mv;
+    err = nvs_set_blob(nvs_handle, "min_voltage", &value, sizeof(float));
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "Ошибка (%s) при записи min_voltage!", esp_err_to_name(err));
         nvs_close(nvs_handle);
         return err;
     }
-    
-    err = nvs_set_float(nvs_handle, "max_voltage", result->max_voltage_mv);
-    if (err != ESP_OK) {
+
+    value = result->max_voltage_mv;
+    err = nvs_set_blob(nvs_handle, "max_voltage", &value, sizeof(float));
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "Ошибка (%s) при записи max_voltage!", esp_err_to_name(err));
         nvs_close(nvs_handle);
         return err;
     }
-    
+
     err = nvs_set_u8(nvs_handle, NVS_KEY_CALIBRATION, 1);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "Ошибка (%s) при записи флага калибровки!", esp_err_to_name(err));
         nvs_close(nvs_handle);
         return err;
     }
-    
+
     // Фиксируем изменения
     err = nvs_commit(nvs_handle);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "Ошибка (%s) при коммите NVS!", esp_err_to_name(err));
         nvs_close(nvs_handle);
         return err;
     }
-    
+
     nvs_close(nvs_handle);
     ESP_LOGI(TAG, "Результаты калибровки успешно сохранены в NVS");
     return ESP_OK;
@@ -549,125 +571,134 @@ static esp_err_t nvs_save_calibration_results(const servo_calibration_result_t *
 // Функция для чтения результатов калибровки из NVS
 static esp_err_t nvs_load_calibration_results(servo_calibration_result_t *result)
 {
-    if (!result) {
+    if (!result)
+    {
         return ESP_ERR_INVALID_ARG;
     }
-    
+
     nvs_handle_t nvs_handle;
     esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         ESP_LOGE(TAG, "Ошибка (%s) открытия NVS!", esp_err_to_name(err));
         return err;
     }
-    
+
     // Проверяем, есть ли сохраненные данные калибровки
     uint8_t calibration_valid = 0;
     err = nvs_get_u8(nvs_handle, NVS_KEY_CALIBRATION, &calibration_valid);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         ESP_LOGW(TAG, "Данные калибровки не найдены: %s", esp_err_to_name(err));
         nvs_close(nvs_handle);
         result->calibration_valid = false;
         return ESP_ERR_NOT_FOUND;
     }
-    
-    if (!calibration_valid) {
+
+    if (!calibration_valid)
+    {
         ESP_LOGW(TAG, "Данные калибровки помечены как недействительные");
         nvs_close(nvs_handle);
         result->calibration_valid = false;
         return ESP_ERR_INVALID_STATE;
     }
-    
-    // Загружаем значения
-    err = nvs_get_float(nvs_handle, "min_angle", &result->min_angle);
-    if (err != ESP_OK) {
+
+    // Загружаем значения как blob
+    float value;
+    size_t length = sizeof(float);
+
+    err = nvs_get_blob(nvs_handle, "min_angle", &value, &length);
+    if (err != ESP_OK || length != sizeof(float))
+    {
         ESP_LOGE(TAG, "Ошибка (%s) при чтении min_angle!", esp_err_to_name(err));
         nvs_close(nvs_handle);
         result->calibration_valid = false;
         return err;
     }
-    
-    err = nvs_get_float(nvs_handle, "max_angle", &result->max_angle);
-    if (err != ESP_OK) {
+    result->min_angle = value;
+
+    err = nvs_get_blob(nvs_handle, "max_angle", &value, &length);
+    if (err != ESP_OK || length != sizeof(float))
+    {
         ESP_LOGE(TAG, "Ошибка (%s) при чтении max_angle!", esp_err_to_name(err));
         nvs_close(nvs_handle);
         result->calibration_valid = false;
         return err;
     }
-    
-    err = nvs_get_float(nvs_handle, "min_voltage", &result->min_voltage_mv);
-    if (err != ESP_OK) {
+    result->max_angle = value;
+
+    err = nvs_get_blob(nvs_handle, "min_voltage", &value, &length);
+    if (err != ESP_OK || length != sizeof(float))
+    {
         ESP_LOGE(TAG, "Ошибка (%s) при чтении min_voltage!", esp_err_to_name(err));
         nvs_close(nvs_handle);
         result->calibration_valid = false;
         return err;
     }
-    
-    err = nvs_get_float(nvs_handle, "max_voltage", &result->max_voltage_mv);
-    if (err != ESP_OK) {
+    result->min_voltage_mv = value;
+
+    err = nvs_get_blob(nvs_handle, "max_voltage", &value, &length);
+    if (err != ESP_OK || length != sizeof(float))
+    {
         ESP_LOGE(TAG, "Ошибка (%s) при чтении max_voltage!", esp_err_to_name(err));
         nvs_close(nvs_handle);
         result->calibration_valid = false;
         return err;
     }
-    
+    result->max_voltage_mv = value;
+
     nvs_close(nvs_handle);
     result->calibration_valid = true;
     ESP_LOGI(TAG, "Загружены данные калибровки: min_angle=%.2f, max_angle=%.2f, min_voltage=%.2f, max_voltage=%.2f",
-            result->min_angle, result->max_angle, result->min_voltage_mv, result->max_voltage_mv);
-    
+             result->min_angle, result->max_angle, result->min_voltage_mv, result->max_voltage_mv);
+
     return ESP_OK;
 }
 
 // Функция запуска калибровки сервопривода
-esp_err_t run_servo_calibration(void) 
+esp_err_t run_servo_calibration(void)
 {
     ESP_LOGI(TAG, "Запуск процедуры калибровки сервопривода");
-    
-    // Инициализируем модуль чтения положения
-    esp_err_t ret = servo_position_reader_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Ошибка инициализации модуля чтения положения: %s", esp_err_to_name(ret));
-        return ret;
-    }
-    
+
     // Настройки калибровки по умолчанию
     servo_calibration_config_t calib_config;
-    ret = servo_calibration_init_config(&calib_config);
-    if (ret != ESP_OK) {
+    esp_err_t ret = servo_calibration_init_config(&calib_config);
+    if (ret != ESP_OK)
+    {
         ESP_LOGE(TAG, "Ошибка инициализации настроек калибровки: %s", esp_err_to_name(ret));
-        servo_position_reader_deinit();
+        // servo_position_reader_deinit();
         return ret;
     }
-    
+
     // Структура для результатов калибровки
     servo_calibration_result_t calib_result;
-    
+
     // Запускаем процедуру калибровки
     ret = servo_calibration_run(&calib_config, &calib_result);
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK)
+    {
         ESP_LOGE(TAG, "Ошибка при выполнении калибровки: %s", esp_err_to_name(ret));
-        servo_position_reader_deinit();
+        // servo_position_reader_deinit();
         return ret;
     }
-    
+
     // Сохраняем результаты калибровки
     ret = nvs_save_calibration_results(&calib_result);
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK)
+    {
         ESP_LOGW(TAG, "Ошибка сохранения результатов калибровки: %s", esp_err_to_name(ret));
         // Продолжаем выполнение, это не критическая ошибка
     }
-    
+
     // Применяем результаты калибровки
     ret = servo_calibration_apply_results(&calib_result);
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK)
+    {
         ESP_LOGE(TAG, "Ошибка применения результатов калибровки: %s", esp_err_to_name(ret));
-        servo_position_reader_deinit();
+        // servo_position_reader_deinit();
         return ret;
     }
-    
-    // Деинициализируем модуль чтения положения
-    servo_position_reader_deinit();
-    
+
     ESP_LOGI(TAG, "Калибровка сервопривода успешно завершена!");
     return ESP_OK;
 }
