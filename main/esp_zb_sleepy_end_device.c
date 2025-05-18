@@ -33,6 +33,7 @@
 #include "driver/gpio.h"
 #include "zboss_api.h"
 #include "servo_control.h"
+#include "servo_calibration.h"
 
 /**
  * @note Make sure set idf.py menuconfig in zigbee component as zigbee end device!
@@ -381,6 +382,9 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_zb_platform_config(&config));
     // // Инициализируем сервопривод перед использованием
     // ESP_ERROR_CHECK(servo_init());
+    
+    // Инициализируем модуль калибровки сервопривода
+    ESP_ERROR_CHECK(servo_calibration_init());
 
     // Читаем сохраненное положение сервопривода из NVS в ЛОКАЛЬНУЮ переменную
     bool local_initial_servo_pos = false;              // Локальная переменная
