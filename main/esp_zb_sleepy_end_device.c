@@ -23,7 +23,6 @@
 #include "zcl/esp_zigbee_zcl_basic.h"
 #include "zcl/esp_zigbee_zcl_window_covering.h"
 #include "esp_zb_sleepy_end_device.h"
-#include "switch_driver.h"
 #ifdef CONFIG_PM_ENABLE
 #include "esp_pm.h"
 #include "esp_private/esp_clk.h"
@@ -45,30 +44,11 @@
 // Хэндл для задачи управления сервоприводом
 static TaskHandle_t servo_task_handle = NULL;
 
-static switch_func_pair_t button_func_pair[] = {
-    {CONFIG_GPIO_INPUT_IO_WAKEUP, SWITCH_ONOFF_TOGGLE_CONTROL}};
-
-static void zb_buttons_handler(switch_func_pair_t *button_func_pair)
-{
-    if (button_func_pair->func == SWITCH_ONOFF_TOGGLE_CONTROL)
-    {
-        // Выполняем сброс Zigbee через локальное действие
-        ESP_LOGI(TAG, "Выполняем сброс Zigbee...");
-        esp_zb_bdb_reset_via_local_action();
-
-        // Запускаем процесс подключения к сети
-        ESP_LOGI(TAG, "Запускаем процесс подключения к сети...");
-        esp_zb_bdb_start_top_level_commissioning(ESP_ZB_BDB_MODE_NETWORK_STEERING);
-    }
-}
-
 static esp_err_t deferred_driver_init(void)
 {
     static bool is_inited = false;
     if (!is_inited)
     {
-        ESP_RETURN_ON_FALSE(switch_driver_init(button_func_pair, PAIR_SIZE(button_func_pair), zb_buttons_handler),
-                            ESP_FAIL, TAG, "Failed to initialize switch driver");
         /* Configure RTC IO wake up:
         The configuration mode depends on your hardware design.
         Since the BOOT button is connected to a pull-up resistor, the wake-up mode is configured as LOW.

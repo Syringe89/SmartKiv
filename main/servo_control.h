@@ -24,11 +24,16 @@
 // Константы для расчета времени перехода сервопривода
 #define SERVO_MS_PER_DEGREE 20.0f          // Милисекунд на градус движения сервопривода
 #define SERVO_MS_PER_DUTY_UNIT 4.0f        // Базовый множитель для расчета времени по duty
-#define SERVO_MIN_FADE_TIME_MS 500         // Минимальное время перехода (мс)
+#define SERVO_MIN_FADE_TIME_MS 100         // Минимальное время перехода (мс)
 #define SERVO_MAX_FADE_TIME_MS 6000        // Максимальное время перехода (мс)
 
-// // Объявление функции инициализации сервопривода
-// esp_err_t servo_init(void);
+// Объявление функции инициализации LEDC
+esp_err_t ledc_init(uint32_t target_duty);
+
+// Объявление функции деинициализации LEDC
+esp_err_t ledc_deinit(void);
+
+uint32_t servo_calculate_duty(float angle);
 
 // Объявление задачи управления сервоприводом
 void servo_control_task(void *pvParameters);

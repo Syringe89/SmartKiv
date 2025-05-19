@@ -9,15 +9,15 @@
 #include "esp_adc/adc_cali_scheme.h"
 
 // Константы для АЦП измерения тока
-#define SERVO_CURRENT_ADC_UNIT ADC_UNIT_1
+#define SERVO_CURRENT_ADC_UNIT ADC_UNIT_1  // ESP32-H2 имеет только ADC_UNIT_1
 #define SERVO_CURRENT_ADC_CHANNEL ADC_CHANNEL_3  // Измените на фактический канал
 #define SERVO_CURRENT_ADC_ATTEN ADC_ATTEN_DB_12  // Максимальный диапазон (до 3.3В)
 
 // Настройки калибровки
-#define SERVO_CALIBRATION_STEP_SIZE 1        // Шаг изменения положения сервопривода (градусы)
-#define SERVO_CALIBRATION_DELAY_MS 200       // Задержка между шагами (мс)
+#define SERVO_CALIBRATION_STEP_SIZE 2        // Шаг изменения положения сервопривода (градусы)
+#define SERVO_CALIBRATION_DELAY_MS 100       // Задержка между шагами (мс)
 #define SERVO_CALIBRATION_SAMPLES 5          // Количество проб тока для усреднения
-#define SERVO_CALIBRATION_THRESHOLD_FACTOR 2.0f // Множитель для определения блокировки (2х от базового тока)
+#define SERVO_CALIBRATION_THRESHOLD_FACTOR 3.0f // Множитель для определения блокировки (2х от базового тока)
 #define SERVO_CALIBRATION_BUTTON CONFIG_GPIO_INPUT_IO_WAKEUP // Кнопка калибровки
 #define SERVO_CALIBRATION_BUTTON_PRESS_DURATION 3000 // Длительность нажатия для начала калибровки (мс)
 
@@ -80,11 +80,12 @@ esp_err_t servo_calibration_load_data(servo_calibration_data_t *calibration_data
 esp_err_t servo_calibration_deinit(void);
 
 /**
- * @brief Функция мониторинга нажатия кнопки калибровки
- *        Запускается как отдельная задача
+ * @brief Функция мониторинга нажатия кнопки
+ *        Обрабатывает как короткие нажатия (сброс Zigbee),
+ *        так и длительные нажатия (калибровка сервопривода)
  * 
  * @param pvParameters Параметры задачи
  */
-void servo_calibration_button_task(void *pvParameters);
+void button_handler_task(void *pvParameters);
 
 #endif // SERVO_CALIBRATION_H 

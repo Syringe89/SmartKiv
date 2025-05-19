@@ -17,7 +17,7 @@ static float calibration_angle_close = SERVO_MIN_ANGLE; // Угол для за�
 static float calibration_angle_open = SERVO_MAX_ANGLE;  // Угол для открытого положения (градусы)
 
 // Функция для расчета скважности по углу
-static uint32_t servo_calculate_duty(float angle)
+uint32_t servo_calculate_duty(float angle)
 {
     ESP_LOGI(TAG, "Начало расчета скважности для угла: %.2f градусов", angle);
     
@@ -72,7 +72,7 @@ static uint32_t servo_calculate_duty(float angle)
 // }
 
 // Функция для инициализации LEDC
-static esp_err_t ledc_init(uint32_t target_duty)
+esp_err_t ledc_init(uint32_t target_duty)
 {
     ESP_LOGI(TAG, "Инициализация LEDC с целевой скважностью=%lu", target_duty);
 
@@ -144,7 +144,7 @@ static esp_err_t ledc_init(uint32_t target_duty)
 }
 
 // Функция для деинициализации LEDC
-static esp_err_t ledc_deinit(void)
+esp_err_t ledc_deinit(void)
 {
     // Сначала останавливаем вывод на канале
     esp_err_t stop_ret = ledc_stop(LEDC_MODE, LEDC_CHANNEL, 0); // Устанавливаем idle_level в 0

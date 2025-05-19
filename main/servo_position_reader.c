@@ -9,6 +9,9 @@
 
 static const char *TAG = "SERVO_POS";
 
+// Глобальная переменная для доступа к handle ADC из других модулей
+adc_oneshot_unit_handle_t g_adc_handle = NULL;
+
 // Глобальные переменные для хранения настроек
 static servo_position_reader_config_t config;
 static bool is_initialized = false;
@@ -52,6 +55,9 @@ esp_err_t servo_position_reader_init(void)
         ESP_LOGE(TAG, "Ошибка инициализации ADC: %s", esp_err_to_name(ret));
         return ret;
     }
+    
+    // Сохраняем handle для доступа из других модулей
+    g_adc_handle = config.adc_handle;
 
     // Настройка канала АЦП
     adc_oneshot_chan_cfg_t chan_config = {
