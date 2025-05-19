@@ -207,6 +207,45 @@ static uint32_t calculate_servo_fade_time(float current_angle, float target_angl
     return fade_time_ms;
 }
 
+// Функция для плавного установления угла сервопривода
+esp_err_t servo_set_angle_smooth(float target_angle, float current_angle)
+{
+    if (target_angle > SERVO_MAX_ANGLE || target_angle < SERVO_MIN_ANGLE)
+    {
+        ESP_LOGE(TAG, "Целевой угол %.2f° вне допустимого диапазона [%.2f°-%.2f°]",
+                 target_angle, (float)SERVO_MIN_ANGLE, (float)SERVO_MAX_ANGLE);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Рассчитываем скважность для целевого угла
+    uint32_t target_duty = servo_calculate_duty(target_angle);
+    
+    // Рассчитываем время перехода на основе разницы углов
+    uint32_t fade_time_ms = calculate_servo_fade_time(current_angle, target_angle);
+
+    // Запускаем плавное изменение от текущей позиции к целевой
+    esp_err_t ret = ledc_set_fade_with_time(LEDC_MODE, LEDC_CHANNEL,
+                                          target_duty,
+                                          fade_time_ms);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Ошибка установки плавного изменения: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ret = ledc_fade_start(LEDC_MODE, LEDC_CHANNEL, LEDC_FADE_NO_WAIT);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Ошибка запуска плавного изменения: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "Плавное изменение сервопривода с %.2f° на %.2f° (Скважность: %lu) запущено со временем: %lu мс.",
+             current_angle, target_angle, target_duty, fade_time_ms);
+
+    return ESP_OK;
+}
+
 void servo_control_task(void *pvParameters)
 {
     uint32_t notificationValue;
@@ -228,7 +267,6 @@ void servo_control_task(void *pvParameters)
 
         // Рассчитываем целевой угол и скважность сразу
         float target_angle = open_cmd ? calibration_angle_open : calibration_angle_close;
-        uint32_t target_duty = servo_calculate_duty(target_angle);
 
         // Инициализируем ADC
         esp_err_t init_ret = servo_position_reader_init();
@@ -281,32 +319,15 @@ void servo_control_task(void *pvParameters)
             continue;
         }
 
-        // Рассчитываем время перехода на основе разницы углов
-        uint32_t fade_time_ms = calculate_servo_fade_time(current_angle, target_angle);
-
-        // Запускаем плавное изменение от текущей позиции к целевой
-        ret = ledc_set_fade_with_time(LEDC_MODE, LEDC_CHANNEL,
-                                      target_duty, // Целевая скважность
-                                      fade_time_ms);
+        // Используем новую функцию для плавного изменения угла
+        ret = servo_set_angle_smooth(target_angle, current_angle);
         if (ret != ESP_OK)
         {
-            ESP_LOGE(TAG, "Ошибка установки плавного изменения: %s", esp_err_to_name(ret));
-        }
-        else
-        {
-            ret = ledc_fade_start(LEDC_MODE, LEDC_CHANNEL, LEDC_FADE_NO_WAIT);
-            if (ret != ESP_OK)
-            {
-                ESP_LOGE(TAG, "Ошибка запуска плавного изменения: %s", esp_err_to_name(ret));
-            }
-            else
-            {
-                ESP_LOGI(TAG, "Плавное изменение сервопривода с %.2f° на %.2f° (Скважность: %lu->%lu) запущено со временем: %lu мс.",
-                         current_angle, target_angle, current_duty, target_duty, fade_time_ms);
-            }
+            ESP_LOGE(TAG, "Ошибка установки угла сервопривода");
         }
 
         // Ждем завершения fade
+        uint32_t fade_time_ms = calculate_servo_fade_time(current_angle, target_angle);
         vTaskDelay(pdMS_TO_TICKS(fade_time_ms + 100)); // Задержка = рассчётное время fade + 100мс запас
 
         // Деактивируем схему чтения после получения значения

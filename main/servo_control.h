@@ -35,4 +35,7 @@ void servo_control_task(void *pvParameters);
 
 // Объявление функции деинициализации сервопривода
 
+// Функция для плавного установления угла сервопривода
+esp_err_t servo_set_angle_smooth(float target_angle, float current_angle);
+
 #endif // SERVO_CONTROL_H
