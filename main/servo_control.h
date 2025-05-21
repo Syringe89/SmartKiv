@@ -2,6 +2,7 @@
 #define SERVO_CONTROL_H
 
 #include "esp_err.h" // Для esp_err_t
+#include "servo_calibration.h" // Добавляем для типа servo_calibration_data_t
 
 #define SERVO_GPIO (14)       // Servo GPIO
 #define SERVO_POWER_GPIO (13) // GPIO для управления питанием сервопривода
@@ -33,14 +34,23 @@ esp_err_t ledc_init(uint32_t target_duty);
 // Объявление функции деинициализации LEDC
 esp_err_t ledc_deinit(void);
 
+// Расчет скважности для заданного угла
 uint32_t servo_calculate_duty(float angle);
 
-// Объявление задачи управления сервоприводом
+// Задача управления сервоприводом
 void servo_control_task(void *pvParameters);
 
 // Объявление функции деинициализации сервопривода
 
 // Функция для плавного установления угла сервопривода
 esp_err_t servo_set_angle_smooth(float target_angle, float current_angle);
+
+/**
+ * @brief Обновить данные калибровки сервопривода в модуле управления
+ * 
+ * @param calibration_data Указатель на структуру с новыми данными калибровки
+ * @return esp_err_t ESP_OK при успешном обновлении
+ */
+esp_err_t servo_control_update_calibration(const servo_calibration_data_t *calibration_data);
 
 #endif // SERVO_CONTROL_H

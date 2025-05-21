@@ -34,6 +34,8 @@
 #include "servo_control.h"
 #include "servo_calibration.h"
 
+static const char *TAG = "ZB_APP";
+
 /**
  * @note Make sure set idf.py menuconfig in zigbee component as zigbee end device!
  */
@@ -365,12 +367,31 @@ void app_main(void)
     
     // Инициализируем модуль калибровки сервопривода
     ESP_ERROR_CHECK(servo_calibration_init());
+    
+    // Проверяем наличие данных калибровки
+    servo_calibration_data_t calib_data;
+    esp_err_t calib_load_ret = servo_calibration_load_data(&calib_data);
+    if (calib_load_ret != ESP_OK || !calib_data.is_calibrated) {
+        ESP_LOGW(TAG, "Данные калибровки сервопривода не найдены или недействительны");
+        ESP_LOGI(TAG, "Запуск процесса калибровки сервопривода...");
+        
+        // Запускаем калибровку если данных нет
+        esp_err_t calib_start_ret = servo_calibration_start(&calib_data);
+        if (calib_start_ret != ESP_OK) {
+            ESP_LOGE(TAG, "Ошибка запуска калибровки: %s", esp_err_to_name(calib_start_ret));
+            // Продолжаем работу с настройками по умолчанию
+        } else {
+            ESP_LOGI(TAG, "Калибровка завершена успешно");
+        }
+    } else {
+        ESP_LOGI(TAG, "Данные калибровки сервопривода загружены успешно (диапазон: %.2f-%.2f градусов)",
+                calib_data.min_angle, calib_data.max_angle);
+    }
 
     // Читаем сохраненное положение сервопривода из NVS в ЛОКАЛЬНУЮ переменную
     bool local_initial_servo_pos = false;              // Локальная переменная
     nvs_read_servo_position(&local_initial_servo_pos); // Читаем в локальную переменную
 
-    /* Не инициализируем сервопривод при старте - он будет инициализирован при использовании */
     /* Создаем задачу управления сервоприводом */
     BaseType_t task_created = xTaskCreate(servo_control_task,
                                           "servo_control_task",
@@ -386,6 +407,15 @@ void app_main(void)
         ESP_ERROR_CHECK(ESP_FAIL); // Остановит выполнение
     }
     ESP_LOGI(TAG, "Servo control task created.");
+    
+    // Передаем данные калибровки в модуль управления сервоприводом
+    if (calib_data.is_calibrated) {
+        esp_err_t update_ret = servo_control_update_calibration(&calib_data);
+        if (update_ret != ESP_OK) {
+            ESP_LOGW(TAG, "Не удалось обновить данные калибровки в модуле управления: %s", 
+                    esp_err_to_name(update_ret));
+        }
+    }
 
     // Отправляем начальное положение задаче сервопривода через уведомление
     ESP_LOGI(TAG, "Sending initial position notification to servo task: %s", local_initial_servo_pos ? "Open" : "Close");

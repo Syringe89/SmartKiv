@@ -28,10 +28,6 @@
 #define NVS_NAMESPACE "storage"
 #define NVS_KEY "servo_pos"
 
-/* --- ДОБАВЛЕНО --- */
-#define TAG "ESP_ZB_SLEEP" /* Log tag for the main application */
-/* --------------- */
-
 /* Basic manufacturer information */
 #define ESP_MANUFACTURER_NAME "\x09" \
                               "ESPRESSIF"             /* Customized manufacturer name */

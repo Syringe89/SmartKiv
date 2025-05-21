@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <math.h>
+#include <string.h> // Для memcpy
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -10,11 +11,18 @@
 #include "esp_zb_sleepy_end_device.h"
 #include "servo_control.h"
 #include "servo_position_reader.h" // Добавляем заголовочный файл для чтения положения
+#include "servo_calibration.h" // Добавляем заголовочный файл для калибровки
 #include "esp_sleep.h"             // Добавляем для работы с режимами сна
 
-// Углы для калибровки
+static const char *TAG = "SERVO_CTRL"; // Определяем TAG для модуля
+
+// Углы для калибровки, будут обновлены из калибровочных данных
 static float calibration_angle_close = SERVO_MIN_ANGLE; // Угол для закрытого положения (градусы)
 static float calibration_angle_open = SERVO_MAX_ANGLE;  // Угол для открытого положения (градусы)
+// Флаг, указывающий, были ли загружены калибровочные данные
+static bool calibration_data_loaded = false;
+// Структура для хранения данных калибровки
+static servo_calibration_data_t servo_calib_data;
 
 // Функция для расчета скважности по углу
 uint32_t servo_calculate_duty(float angle)
@@ -34,15 +42,36 @@ uint32_t servo_calculate_duty(float angle)
         angle = SERVO_MIN_ANGLE;
     }
 
-    // Рассчитываем длительность импульса для заданного угла
-    float pulse_width_us = SERVO_MIN_WIDTH_US +
-                           ((float)(SERVO_MAX_WIDTH_US - SERVO_MIN_WIDTH_US) * angle / SERVO_MAX_ANGLE);
+    uint32_t duty;
+    
+    // Проверяем, доступны ли калиброванные значения
+    if (calibration_data_loaded && servo_calib_data.is_calibrated) {
+        // Используем линейную интерполяцию между калиброванными значениями
+        if (angle <= calibration_angle_close) {
+            duty = servo_calib_data.min_duty;
+        } else if (angle >= calibration_angle_open) {
+            duty = servo_calib_data.max_duty;
+        } else {
+            // Линейная интерполяция
+            float ratio = (angle - calibration_angle_close) / (calibration_angle_open - calibration_angle_close);
+            duty = (uint32_t)(servo_calib_data.min_duty + ratio * (servo_calib_data.max_duty - servo_calib_data.min_duty));
+        }
+        
+        ESP_LOGI(TAG, "Используется калиброванное значение скважности: %lu", duty);
+    } else {
+        // Стандартный расчет, если калибровка недоступна
+        // Рассчитываем длительность импульса для заданного угла
+        float pulse_width_us = SERVO_MIN_WIDTH_US +
+                               ((float)(SERVO_MAX_WIDTH_US - SERVO_MIN_WIDTH_US) * angle / SERVO_MAX_ANGLE);
 
-    // Рассчитываем период ШИМ
-    uint32_t period_us = 1000000 / SERVO_FREQ;
+        // Рассчитываем период ШИМ
+        uint32_t period_us = 1000000 / SERVO_FREQ;
 
-    // Рассчитываем значение скважности
-    uint32_t duty = (uint32_t)(((pulse_width_us * (float)LEDC_MAX_DUTY)) / period_us);
+        // Рассчитываем значение скважности
+        duty = (uint32_t)(((pulse_width_us * (float)LEDC_MAX_DUTY)) / period_us);
+        
+        ESP_LOGI(TAG, "Используется стандартный расчет скважности: %lu", duty);
+    }
 
     // Ограничиваем скважность максимальным значением
     if (duty > LEDC_MAX_DUTY)
@@ -252,6 +281,22 @@ void servo_control_task(void *pvParameters)
     bool open_cmd;
 
     ESP_LOGI(TAG, "Задача управления сервоприводом запущена, ожидание уведомлений.");
+    
+    // Попытка загрузить данные калибровки, если они еще не загружены
+    if (!calibration_data_loaded) {
+        esp_err_t load_ret = servo_calibration_load_data(&servo_calib_data);
+        if (load_ret == ESP_OK && servo_calib_data.is_calibrated) {
+            // Используем данные калибровки для определения крайних положений
+            calibration_angle_close = servo_calib_data.min_angle;
+            calibration_angle_open = servo_calib_data.max_angle;
+            calibration_data_loaded = true;
+            ESP_LOGI(TAG, "Данные калибровки загружены. Диапазон: %.2f-%.2f градусов.",
+                     calibration_angle_close, calibration_angle_open);
+        } else {
+            ESP_LOGW(TAG, "Данные калибровки не найдены или недействительны, используем значения по умолчанию");
+        }
+    }
+    
     ESP_LOGI(TAG, "Целевые углы - Закрыто: %.2f, Открыто: %.2f",
              calibration_angle_close, calibration_angle_open);
 
@@ -387,3 +432,30 @@ void servo_control_task(void *pvParameters)
 
 //     return ESP_OK; // Возвращаем ESP_OK, так как основная инициализация периферии завершена
 // }
+
+// Функция для обновления данных калибровки
+esp_err_t servo_control_update_calibration(const servo_calibration_data_t *calibration_data)
+{
+    if (calibration_data == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    if (!calibration_data->is_calibrated) {
+        ESP_LOGW(TAG, "Попытка обновить калибровочные данные некалиброванными значениями");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    // Копируем данные калибровки
+    memcpy(&servo_calib_data, calibration_data, sizeof(servo_calibration_data_t));
+    
+    // Обновляем углы
+    calibration_angle_close = servo_calib_data.min_angle;
+    calibration_angle_open = servo_calib_data.max_angle;
+    calibration_data_loaded = true;
+    
+    ESP_LOGI(TAG, "Калибровочные данные обновлены. Диапазон: %.2f-%.2f градусов, скважность: %lu-%lu",
+             calibration_angle_close, calibration_angle_open,
+             servo_calib_data.min_duty, servo_calib_data.max_duty);
+    
+    return ESP_OK;
+}
