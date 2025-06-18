@@ -16,13 +16,9 @@
 
 static const char *TAG = "SERVO_CTRL"; // Определяем TAG для модуля
 
-// Углы для калибровки, будут обновлены из калибровочных данных
-static float calibration_angle_close = SERVO_MIN_ANGLE; // Угол для закрытого положения (градусы)
-static float calibration_angle_open = SERVO_MAX_ANGLE;  // Угол для открытого положения (градусы)
-// Флаг, указывающий, были ли загружены калибровочные данные
-static bool calibration_data_loaded = false;
-// Структура для хранения данных калибровки
-static servo_calibration_data_t servo_calib_data;
+// Глобальная конфигурация сервопривода
+static servo_control_config_t servo_config;
+static bool is_initialized = false;
 
 // Функция для расчета скважности по углу
 uint32_t servo_calculate_duty(float angle)
@@ -30,120 +26,110 @@ uint32_t servo_calculate_duty(float angle)
     ESP_LOGI(TAG, "Начало расчета скважности для угла: %.2f градусов", angle);
     
     // Ограничиваем угол, чтобы избежать выхода за пределы
-    if (angle > SERVO_MAX_ANGLE)
+    if (angle > servo_config.max_angle)
     {
-        ESP_LOGW(TAG, "Угол превышает максимум (%.2f), ограничиваем до %d", angle, SERVO_MAX_ANGLE);
-        angle = SERVO_MAX_ANGLE;
+        ESP_LOGW(TAG, "Угол превышает максимум (%.2f), ограничиваем до %.2f", angle, servo_config.max_angle);
+        angle = servo_config.max_angle;
     }
 
-    if (angle < SERVO_MIN_ANGLE)
+    if (angle < servo_config.min_angle)
     {
-        ESP_LOGW(TAG, "Угол меньше минимума (%.2f), ограничиваем до %d", angle, SERVO_MIN_ANGLE);
-        angle = SERVO_MIN_ANGLE;
+        ESP_LOGW(TAG, "Угол меньше минимума (%.2f), ограничиваем до %.2f", angle, servo_config.min_angle);
+        angle = servo_config.min_angle;
     }
 
     uint32_t duty;
     
     // Проверяем, доступны ли калиброванные значения
-    if (calibration_data_loaded && servo_calib_data.is_calibrated) {
+    if (servo_config.is_calibrated) {
         // Используем линейную интерполяцию между калиброванными значениями
-        if (angle <= calibration_angle_close) {
-            duty = servo_calib_data.min_duty;
-        } else if (angle >= calibration_angle_open) {
-            duty = servo_calib_data.max_duty;
+        if (angle <= servo_config.calibration_min_angle) {
+            duty = servo_config.calibration_min_duty;
+        } else if (angle >= servo_config.calibration_max_angle) {
+            duty = servo_config.calibration_max_duty;
         } else {
             // Линейная интерполяция
-            float ratio = (angle - calibration_angle_close) / (calibration_angle_open - calibration_angle_close);
-            duty = (uint32_t)(servo_calib_data.min_duty + ratio * (servo_calib_data.max_duty - servo_calib_data.min_duty));
+            float ratio = (angle - servo_config.calibration_min_angle) / 
+                         (servo_config.calibration_max_angle - servo_config.calibration_min_angle);
+            duty = (uint32_t)(servo_config.calibration_min_duty + 
+                             ratio * (servo_config.calibration_max_duty - servo_config.calibration_min_duty));
         }
         
-        ESP_LOGI(TAG, "Используется калиброванное значение скважности: %lu", duty);
+        ESP_LOGI(TAG, "Используется калиброванное значение скважности: %u", duty);
     } else {
         // Стандартный расчет, если калибровка недоступна
-        // Рассчитываем длительность импульса для заданного угла
-        float pulse_width_us = SERVO_MIN_WIDTH_US +
-                               ((float)(SERVO_MAX_WIDTH_US - SERVO_MIN_WIDTH_US) * angle / SERVO_MAX_ANGLE);
+        float pulse_width_us = servo_config.min_pulse_width_us +
+                             ((float)(servo_config.max_pulse_width_us - servo_config.min_pulse_width_us) * 
+                              (angle - servo_config.min_angle) / (servo_config.max_angle - servo_config.min_angle));
 
         // Рассчитываем период ШИМ
-        uint32_t period_us = 1000000 / SERVO_FREQ;
+        uint32_t period_us = 1000000 / servo_config.ledc_freq_hz;
 
         // Рассчитываем значение скважности
-        duty = (uint32_t)(((pulse_width_us * (float)LEDC_MAX_DUTY)) / period_us);
+        duty = (uint32_t)((pulse_width_us * (1 << servo_config.duty_resolution)) / period_us);
         
-        ESP_LOGI(TAG, "Используется стандартный расчет скважности: %lu", duty);
+        ESP_LOGI(TAG, "Используется стандартный расчет скважности: %u", duty);
     }
 
     // Ограничиваем скважность максимальным значением
-    if (duty > LEDC_MAX_DUTY)
+    uint32_t max_duty = (1 << servo_config.duty_resolution) - 1;
+    if (duty > max_duty)
     {
-        ESP_LOGW(TAG, "Скважность превышает максимум (%lu > %d), ограничиваем", duty, LEDC_MAX_DUTY);
-        duty = LEDC_MAX_DUTY;
+        ESP_LOGW(TAG, "Скважность превышает максимум (%u > %u), ограничиваем", duty, max_duty);
+        duty = max_duty;
     }
 
-    ESP_LOGI(TAG, "Итоговая скважность: %lu", duty);
+    ESP_LOGI(TAG, "Итоговая скважность: %u", duty);
     return duty;
 }
 
-// // Функция для включения/выключения питания сервопривода
-// static void servo_power_control(bool power_on)
-// {
-//     gpio_set_level(SERVO_POWER_GPIO, power_on ? 1 : 0);
-//     if (power_on)
-//     {
-//         ESP_LOGI(TAG, "Servo power ON");
-//         // Даем время на стабилизацию питания
-//         vTaskDelay(pdMS_TO_TICKS(100));
-//     }
-//     else
-//     {
-//         ESP_LOGI(TAG, "Servo power OFF");
-//     }
-// }
 
 // Функция для инициализации LEDC
 esp_err_t ledc_init(uint32_t target_duty)
 {
-    ESP_LOGI(TAG, "Инициализация LEDC с целевой скважностью=%lu", target_duty);
+    ESP_LOGI(TAG, "Инициализация LEDC с целевой скважностью=%u", target_duty);
 
     // Сначала конфигурируем таймер LEDC
-    ledc_timer_config_t ledc_timer_reinit = {
-        .duty_resolution = LEDC_DUTY_RESOLUTION,
-        .freq_hz = SERVO_FREQ,
-        .speed_mode = LEDC_MODE,
-        .timer_num = LEDC_TIMER,
+    ledc_timer_config_t ledc_timer = {
+        .duty_resolution = servo_config.duty_resolution,
+        .freq_hz = servo_config.ledc_freq_hz,
+        .speed_mode = servo_config.ledc_mode,
+        .timer_num = servo_config.ledc_timer,
         .clk_cfg = LEDC_AUTO_CLK,
-        .deconfigure = false // Убедимся, что это инициализация
+        .deconfigure = false
     };
-    esp_err_t timer_ret = ledc_timer_config(&ledc_timer_reinit);
+    
+    esp_err_t timer_ret = ledc_timer_config(&ledc_timer);
     if (timer_ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Ошибка повторной инициализации таймера LEDC: %s", esp_err_to_name(timer_ret));
+        ESP_LOGE(TAG, "Ошибка инициализации таймера LEDC: %s", esp_err_to_name(timer_ret));
         return timer_ret;
     }
 
     // Убедимся, что таймер запущен перед операциями с каналом
-    esp_err_t resume_ret = ledc_timer_resume(LEDC_MODE, LEDC_TIMER);
+    esp_err_t resume_ret = ledc_timer_resume(servo_config.ledc_mode, servo_config.ledc_timer);
     if (resume_ret != ESP_OK)
     {
-        ESP_LOGW(TAG, "Не удалось возобновить таймер LEDC (возможно, уже запущен): %s", esp_err_to_name(resume_ret));
-        // Не критично, если таймер уже запущен после config
+        ESP_LOGW(TAG, "Не удалось возобновить таймер LEDC: %s", esp_err_to_name(resume_ret));
     }
 
     // Затем конфигурируем канал (привязываем GPIO) с целевым значением duty
-    ledc_channel_config_t ledc_channel_reinit = {
-        .channel = LEDC_CHANNEL,
+    ledc_channel_config_t ledc_channel = {
+        .channel = servo_config.ledc_channel,
         .duty = target_duty, // Устанавливаем целевое значение сразу
-        .gpio_num = SERVO_GPIO,
-        .speed_mode = LEDC_MODE,
+        .gpio_num = servo_config.servo_gpio,
+        .speed_mode = servo_config.ledc_mode,
         .hpoint = 0,
-        .timer_sel = LEDC_TIMER,
+        .timer_sel = servo_config.ledc_timer,
         .intr_type = LEDC_INTR_DISABLE,
+        .flags.output_invert = 0,
         .sleep_mode = LEDC_SLEEP_MODE_NO_ALIVE_ALLOW_PD // Используем безопасный режим
     };
-    esp_err_t channel_ret = ledc_channel_config(&ledc_channel_reinit);
+    
+    esp_err_t channel_ret = ledc_channel_config(&ledc_channel);
     if (channel_ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Ошибка повторной инициализации канала LEDC: %s", esp_err_to_name(channel_ret));
+        ESP_LOGE(TAG, "Ошибка инициализации канала LEDC: %s", esp_err_to_name(channel_ret));
         return channel_ret;
     }
 
@@ -157,18 +143,17 @@ esp_err_t ledc_init(uint32_t target_duty)
     }
 
     // Явно обновляем duty после конфигурации канала и таймера
-    esp_err_t update_ret = ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
+    esp_err_t update_ret = ledc_update_duty(servo_config.ledc_mode, servo_config.ledc_channel);
     if (update_ret != ESP_OK)
     {
         ESP_LOGE(TAG, "Ошибка обновления скважности LEDC: %s", esp_err_to_name(update_ret));
         return update_ret;
     }
     
-    ESP_LOGI(TAG, "LEDC успешно инициализирован со скважностью=%lu", target_duty);
+    ESP_LOGI(TAG, "LEDC успешно инициализирован со скважностью=%u", target_duty);
     
     // Добавляем небольшую задержку для применения настроек
     vTaskDelay(pdMS_TO_TICKS(20));
-
     return ESP_OK;
 }
 
@@ -176,7 +161,7 @@ esp_err_t ledc_init(uint32_t target_duty)
 esp_err_t ledc_deinit(void)
 {
     // Сначала останавливаем вывод на канале
-    esp_err_t stop_ret = ledc_stop(LEDC_MODE, LEDC_CHANNEL, 0); // Устанавливаем idle_level в 0
+    esp_err_t stop_ret = ledc_stop(servo_config.ledc_mode, servo_config.ledc_channel, 0); // Устанавливаем idle_level в 0
     if (stop_ret != ESP_OK)
     {
         ESP_LOGE(TAG, "Ошибка остановки канала LEDC: %s", esp_err_to_name(stop_ret));
@@ -184,7 +169,7 @@ esp_err_t ledc_deinit(void)
     }
 
     // Останавливаем таймер LEDC
-    esp_err_t pause_ret = ledc_timer_pause(LEDC_MODE, LEDC_TIMER);
+    esp_err_t pause_ret = ledc_timer_pause(servo_config.ledc_mode, servo_config.ledc_timer);
     if (pause_ret != ESP_OK)
     {
         ESP_LOGE(TAG, "Ошибка приостановки таймера LEDC: %s", esp_err_to_name(pause_ret));
@@ -196,9 +181,11 @@ esp_err_t ledc_deinit(void)
 
     // Деконфигурируем таймер LEDC
     ledc_timer_config_t ledc_timer_deinit = {
-        .speed_mode = LEDC_MODE,
-        .timer_num = LEDC_TIMER,
-        .deconfigure = true};
+        .speed_mode = servo_config.ledc_mode,
+        .timer_num = servo_config.ledc_timer,
+        .deconfigure = true
+    };
+    
     esp_err_t deconfig_ret = ledc_timer_config(&ledc_timer_deinit);
     if (deconfig_ret != ESP_OK)
     {
@@ -207,8 +194,7 @@ esp_err_t ledc_deinit(void)
     }
 
     // Сбрасываем конфигурацию GPIO пина, чтобы отсоединить LEDC
-    gpio_reset_pin(SERVO_GPIO);
-
+    gpio_reset_pin(servo_config.servo_gpio);
     return ESP_OK;
 }
 
@@ -219,18 +205,18 @@ static uint32_t calculate_servo_fade_time(float current_angle, float target_angl
     float angle_diff = fabsf(target_angle - current_angle);
     
     // Рассчитываем время на основе разницы углов
-    uint32_t fade_time_ms = (uint32_t)(angle_diff * SERVO_MS_PER_DEGREE);
+    uint32_t fade_time_ms = (uint32_t)(angle_diff * servo_config.ms_per_degree);
     
-    ESP_LOGI(TAG, "Рассчитанное время перехода на основе разницы углов (%.2f градусов): %lu мс", 
+    ESP_LOGI(TAG, "Рассчитанное время перехода на основе разницы углов (%.2f градусов): %u мс", 
             angle_diff, fade_time_ms);
     
     // Ограничиваем время перехода минимальным и максимальным значениями
-    if (fade_time_ms < SERVO_MIN_FADE_TIME_MS) {
-        fade_time_ms = SERVO_MIN_FADE_TIME_MS;
-        ESP_LOGI(TAG, "Применено минимальное время перехода: %lu мс", fade_time_ms);
-    } else if (fade_time_ms > SERVO_MAX_FADE_TIME_MS) {
-        fade_time_ms = SERVO_MAX_FADE_TIME_MS;
-        ESP_LOGI(TAG, "Применено максимальное время перехода: %lu мс", fade_time_ms);
+    if (fade_time_ms < servo_config.min_fade_time_ms) {
+        fade_time_ms = servo_config.min_fade_time_ms;
+        ESP_LOGI(TAG, "Применено минимальное время перехода: %u мс", fade_time_ms);
+    } else if (fade_time_ms > servo_config.max_fade_time_ms) {
+        fade_time_ms = servo_config.max_fade_time_ms;
+        ESP_LOGI(TAG, "Применено максимальное время перехода: %u мс", fade_time_ms);
     }
     
     return fade_time_ms;
@@ -239,10 +225,15 @@ static uint32_t calculate_servo_fade_time(float current_angle, float target_angl
 // Функция для плавного установления угла сервопривода
 esp_err_t servo_set_angle_smooth(float target_angle, float current_angle)
 {
-    if (target_angle > SERVO_MAX_ANGLE || target_angle < SERVO_MIN_ANGLE)
+    if (!is_initialized) {
+        ESP_LOGE(TAG, "Сервопривод не инициализирован");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (target_angle > servo_config.max_angle || target_angle < servo_config.min_angle)
     {
         ESP_LOGE(TAG, "Целевой угол %.2f° вне допустимого диапазона [%.2f°-%.2f°]",
-                 target_angle, (float)SERVO_MIN_ANGLE, (float)SERVO_MAX_ANGLE);
+                 target_angle, servo_config.min_angle, servo_config.max_angle);
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -253,7 +244,8 @@ esp_err_t servo_set_angle_smooth(float target_angle, float current_angle)
     uint32_t fade_time_ms = calculate_servo_fade_time(current_angle, target_angle);
 
     // Запускаем плавное изменение от текущей позиции к целевой
-    esp_err_t ret = ledc_set_fade_with_time(LEDC_MODE, LEDC_CHANNEL,
+    esp_err_t ret = ledc_set_fade_with_time(servo_config.ledc_mode, 
+                                          servo_config.ledc_channel,
                                           target_duty,
                                           fade_time_ms);
     if (ret != ESP_OK)
@@ -262,16 +254,49 @@ esp_err_t servo_set_angle_smooth(float target_angle, float current_angle)
         return ret;
     }
 
-    ret = ledc_fade_start(LEDC_MODE, LEDC_CHANNEL, LEDC_FADE_NO_WAIT);
+    ret = ledc_fade_start(servo_config.ledc_mode, servo_config.ledc_channel, LEDC_FADE_NO_WAIT);
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "Ошибка запуска плавного изменения: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    ESP_LOGI(TAG, "Плавное изменение сервопривода с %.2f° на %.2f° (Скважность: %lu) запущено со временем: %lu мс.",
+    ESP_LOGI(TAG, "Плавное изменение сервопривода с %.2f° на %.2f° (Скважность: %u) запущено со временем: %u мс.",
              current_angle, target_angle, target_duty, fade_time_ms);
 
+    return ESP_OK;
+}
+
+// Функция инициализации сервопривода
+esp_err_t servo_control_init(const servo_control_config_t *config)
+{
+    if (config == NULL) {
+        ESP_LOGE(TAG, "Конфигурация сервопривода не предоставлена");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Копируем конфигурацию
+    memcpy(&servo_config, config, sizeof(servo_control_config_t));
+
+    // Если используется управление питанием, настраиваем GPIO
+    if (servo_config.power_gpio != GPIO_NUM_NC) {
+        gpio_config_t io_conf = {
+            .pin_bit_mask = (1ULL << servo_config.power_gpio),
+            .mode = GPIO_MODE_OUTPUT,
+            .pull_up_en = GPIO_PULLUP_DISABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE
+        };
+
+        esp_err_t ret = gpio_config(&io_conf);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Ошибка настройки GPIO питания сервопривода: %s", esp_err_to_name(ret));
+            return ret;
+        }
+    }
+
+    is_initialized = true;
+    ESP_LOGI(TAG, "Сервопривод успешно инициализирован");
     return ESP_OK;
 }
 
@@ -282,23 +307,22 @@ void servo_control_task(void *pvParameters)
 
     ESP_LOGI(TAG, "Задача управления сервоприводом запущена, ожидание уведомлений.");
     
-    // Попытка загрузить данные калибровки, если они еще не загружены
-    if (!calibration_data_loaded) {
-        esp_err_t load_ret = servo_calibration_load_data(&servo_calib_data);
-        if (load_ret == ESP_OK && servo_calib_data.is_calibrated) {
-            // Используем данные калибровки для определения крайних положений
-            calibration_angle_close = servo_calib_data.min_angle;
-            calibration_angle_open = servo_calib_data.max_angle;
-            calibration_data_loaded = true;
-            ESP_LOGI(TAG, "Данные калибровки загружены. Диапазон: %.2f-%.2f градусов.",
-                     calibration_angle_close, calibration_angle_open);
-        } else {
-            ESP_LOGW(TAG, "Данные калибровки не найдены или недействительны, используем значения по умолчанию");
-        }
+    // Попытка загрузить данные калибровки
+    servo_calibration_data_t calib_data;
+    esp_err_t load_ret = servo_calibration_load_data(&calib_data);
+    if (load_ret == ESP_OK && calib_data.is_calibrated) {
+        // Обновляем калибровочные значения в конфигурации
+        servo_config.is_calibrated = true;
+        servo_config.calibration_min_angle = calib_data.min_angle;
+        servo_config.calibration_max_angle = calib_data.max_angle;
+        servo_config.calibration_min_duty = calib_data.min_duty;
+        servo_config.calibration_max_duty = calib_data.max_duty;
+        
+        ESP_LOGI(TAG, "Данные калибровки загружены. Диапазон: %.2f-%.2f градусов.",
+                 servo_config.calibration_min_angle, servo_config.calibration_max_angle);
+    } else {
+        ESP_LOGW(TAG, "Данные калибровки не найдены или недействительны, используем значения по умолчанию");
     }
-    
-    ESP_LOGI(TAG, "Целевые углы - Закрыто: %.2f, Открыто: %.2f",
-             calibration_angle_close, calibration_angle_open);
 
     for (;;)
     {
@@ -310,8 +334,13 @@ void servo_control_task(void *pvParameters)
         // Запрещаем сон Zigbee перед началом движения
         esp_zb_sleep_enable(false);
 
-        // Рассчитываем целевой угол и скважность сразу
-        float target_angle = open_cmd ? calibration_angle_open : calibration_angle_close;
+        // Используем калиброванные углы, если доступны, иначе стандартные
+        float target_angle;
+        if (servo_config.is_calibrated) {
+            target_angle = open_cmd ? servo_config.calibration_max_angle : servo_config.calibration_min_angle;
+        } else {
+            target_angle = open_cmd ? servo_config.max_angle : servo_config.min_angle;
+        }
 
         // Инициализируем ADC
         esp_err_t init_ret = servo_position_reader_init();
@@ -328,10 +357,6 @@ void servo_control_task(void *pvParameters)
         {
             ESP_LOGE(TAG, "Ошибка активации схемы считывания: %s", esp_err_to_name(ret));
         }
-        else
-        {
-            ESP_LOGI(TAG, "Схема считывания активирована");
-        }
 
         // Чтение угла сервопривода
         // Определяем текущее положение сервопривода
@@ -344,14 +369,13 @@ void servo_control_task(void *pvParameters)
         {
             // Если успешно получили угол, используем его для расчета текущей скважности
             current_duty = servo_calculate_duty(current_angle);
-            ESP_LOGI(TAG, "Текущий угол сервопривода: %.2f (скважность: %lu)", current_angle, current_duty);
+            ESP_LOGI(TAG, "Текущий угол сервопривода: %.2f (скважность: %u)", current_angle, current_duty);
         }
         else
         {
-            // В случае ошибки используем безопасное начальное значение
             ESP_LOGW(TAG, "Не удалось прочитать текущий угол сервопривода: %s", esp_err_to_name(angle_ret));
-            // Используем закрытое положение как безопасное начальное
-            current_angle = calibration_angle_close;
+            // Если не удалось прочитать угол, используем минимальный угол
+            current_angle = servo_config.min_angle; 
             current_duty = servo_calculate_duty(current_angle);
         }
 
@@ -364,26 +388,22 @@ void servo_control_task(void *pvParameters)
             continue;
         }
 
-        // Используем новую функцию для плавного изменения угла
+        // Плавно устанавливаем угол сервопривода
         ret = servo_set_angle_smooth(target_angle, current_angle);
         if (ret != ESP_OK)
         {
             ESP_LOGE(TAG, "Ошибка установки угла сервопривода");
         }
 
-        // Ждем завершения fade
+        // Добавляем задержку для плавного перехода
         uint32_t fade_time_ms = calculate_servo_fade_time(current_angle, target_angle);
-        vTaskDelay(pdMS_TO_TICKS(fade_time_ms + 100)); // Задержка = рассчётное время fade + 100мс запас
+        vTaskDelay(pdMS_TO_TICKS(fade_time_ms + 100)); // Добавляем 100 мс для плавного перехода
 
-        // Деактивируем схему чтения после получения значения
+        // Деактивируем схему считывания
         ret = servo_position_set_reading_enabled(false);
         if (ret != ESP_OK)
         {
             ESP_LOGE(TAG, "Ошибка деактивации схемы считывания: %s", esp_err_to_name(ret));
-        }
-        else
-        {
-            ESP_LOGI(TAG, "Схема считывания деактивирована");
         }
 
         // Деинициализируем LEDC перед сном
@@ -445,17 +465,16 @@ esp_err_t servo_control_update_calibration(const servo_calibration_data_t *calib
         return ESP_ERR_INVALID_STATE;
     }
     
-    // Копируем данные калибровки
-    memcpy(&servo_calib_data, calibration_data, sizeof(servo_calibration_data_t));
+    // Обновляем калибровочные значения в конфигурации
+    servo_config.is_calibrated = true;
+    servo_config.calibration_min_angle = calibration_data->min_angle;
+    servo_config.calibration_max_angle = calibration_data->max_angle;
+    servo_config.calibration_min_duty = calibration_data->min_duty;
+    servo_config.calibration_max_duty = calibration_data->max_duty;
     
-    // Обновляем углы
-    calibration_angle_close = servo_calib_data.min_angle;
-    calibration_angle_open = servo_calib_data.max_angle;
-    calibration_data_loaded = true;
-    
-    ESP_LOGI(TAG, "Калибровочные данные обновлены. Диапазон: %.2f-%.2f градусов, скважность: %lu-%lu",
-             calibration_angle_close, calibration_angle_open,
-             servo_calib_data.min_duty, servo_calib_data.max_duty);
+    ESP_LOGI(TAG, "Калибровочные данные обновлены. Диапазон: %.2f-%.2f градусов, скважность: %u-%u",
+             servo_config.calibration_min_angle, servo_config.calibration_max_angle,
+             servo_config.calibration_min_duty, servo_config.calibration_max_duty);
     
     return ESP_OK;
 }

@@ -1,8 +1,9 @@
-#ifndef SERVO_CONTROL_H
-#define SERVO_CONTROL_H
+#pragma once
 
 #include "esp_err.h" // Для esp_err_t
 #include "servo_calibration.h" // Добавляем для типа servo_calibration_data_t
+#include "driver/ledc.h"
+#include "driver/gpio.h"
 
 #define SERVO_GPIO (14)       // Servo GPIO
 #define SERVO_POWER_GPIO (13) // GPIO для управления питанием сервопривода
@@ -27,6 +28,61 @@
 #define SERVO_MS_PER_DUTY_UNIT 4.0f        // Базовый множитель для расчета времени по duty
 #define SERVO_MIN_FADE_TIME_MS 100         // Минимальное время перехода (мс)
 #define SERVO_MAX_FADE_TIME_MS 6000        // Максимальное время перехода (мс)
+
+// Структура для хранения конфигурации сервопривода
+typedef struct {
+    // Параметры GPIO
+    gpio_num_t servo_gpio;           // GPIO пин для управления сервоприводом
+    gpio_num_t power_gpio;          // GPIO пин для управления питанием сервопривода (если используется)
+
+    // Параметры LEDC
+    ledc_mode_t ledc_mode;         // Режим работы LEDC (обычно LEDC_LOW_SPEED_MODE)
+    ledc_timer_t ledc_timer;       // Номер таймера LEDC
+    ledc_channel_t ledc_channel;   // Номер канала LEDC
+    uint32_t ledc_freq_hz;        // Частота ШИМ в Гц
+    ledc_timer_bit_t duty_resolution; // Разрешение ШИМ в битах
+
+    // Параметры сервопривода
+    float min_angle;              // Минимальный угол сервопривода (в градусах)
+    float max_angle;              // Максимальный угол сервопривода (в градусах)
+    uint32_t min_pulse_width_us;  // Минимальная длительность импульса (в микросекундах)
+    uint32_t max_pulse_width_us;  // Максимальная длительность импульса (в микросекундах)
+
+    // Параметры плавного движения
+    float ms_per_degree;          // Миллисекунд на градус при движении
+    uint32_t min_fade_time_ms;    // Минимальное время перехода (в миллисекундах)
+    uint32_t max_fade_time_ms;    // Максимальное время перехода (в миллисекундах)
+
+    // Калибровочные значения
+    bool is_calibrated;           // Флаг калибровки
+    float calibration_min_angle;  // Калиброванный минимальный угол
+    float calibration_max_angle;  // Калиброванный максимальный угол
+    uint32_t calibration_min_duty; // Калиброванная минимальная скважность
+    uint32_t calibration_max_duty; // Калиброванная максимальная скважность
+} servo_control_config_t;
+
+// Значения по умолчанию для конфигурации сервопривода
+#define SERVO_CONTROL_DEFAULT_CONFIG() { \
+    .servo_gpio = GPIO_NUM_4,            \
+    .power_gpio = GPIO_NUM_5,            \
+    .ledc_mode = LEDC_LOW_SPEED_MODE,    \
+    .ledc_timer = LEDC_TIMER_0,          \
+    .ledc_channel = LEDC_CHANNEL_0,      \
+    .ledc_freq_hz = 50,                  \
+    .duty_resolution = LEDC_TIMER_14_BIT, \
+    .min_angle = 0.0f,                   \
+    .max_angle = 180.0f,                 \
+    .min_pulse_width_us = 500,           \
+    .max_pulse_width_us = 2500,          \
+    .ms_per_degree = 10.0f,              \
+    .min_fade_time_ms = 100,             \
+    .max_fade_time_ms = 2000,            \
+    .is_calibrated = false,             \
+    .calibration_min_angle = 0.0f,        \
+    .calibration_max_angle = 180.0f,      \
+    .calibration_min_duty = 0,           \
+    .calibration_max_duty = 0            \
+}
 
 // Объявление функции инициализации LEDC
 esp_err_t ledc_init(uint32_t target_duty);
@@ -53,4 +109,5 @@ esp_err_t servo_set_angle_smooth(float target_angle, float current_angle);
  */
 esp_err_t servo_control_update_calibration(const servo_calibration_data_t *calibration_data);
 
-#endif // SERVO_CONTROL_H
+// Функции для работы с сервоприводом
+esp_err_t servo_control_init(const servo_control_config_t *config);
