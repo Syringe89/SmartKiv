@@ -63,23 +63,23 @@ typedef struct {
 
 // Значения по умолчанию для конфигурации сервопривода
 #define SERVO_CONTROL_DEFAULT_CONFIG() { \
-    .servo_gpio = GPIO_NUM_4,            \
-    .power_gpio = GPIO_NUM_5,            \
-    .ledc_mode = LEDC_LOW_SPEED_MODE,    \
-    .ledc_timer = LEDC_TIMER_0,          \
-    .ledc_channel = LEDC_CHANNEL_0,      \
-    .ledc_freq_hz = 50,                  \
-    .duty_resolution = LEDC_TIMER_14_BIT, \
-    .min_angle = 0.0f,                   \
-    .max_angle = 180.0f,                 \
-    .min_pulse_width_us = 500,           \
-    .max_pulse_width_us = 2500,          \
-    .ms_per_degree = 10.0f,              \
-    .min_fade_time_ms = 100,             \
-    .max_fade_time_ms = 2000,            \
-    .is_calibrated = false,             \
-    .calibration_min_angle = 0.0f,        \
-    .calibration_max_angle = 180.0f,      \
+    .servo_gpio = SERVO_GPIO,            \
+    .power_gpio = SERVO_POWER_GPIO,      \
+    .ledc_mode = LEDC_MODE,             \
+    .ledc_timer = LEDC_TIMER,           \
+    .ledc_channel = LEDC_CHANNEL,       \
+    .ledc_freq_hz = SERVO_FREQ,         \
+    .duty_resolution = LEDC_DUTY_RESOLUTION, \
+    .min_angle = SERVO_MIN_ANGLE,        \
+    .max_angle = SERVO_MAX_ANGLE,        \
+    .min_pulse_width_us = SERVO_MIN_WIDTH_US, \
+    .max_pulse_width_us = SERVO_MAX_WIDTH_US, \
+    .ms_per_degree = SERVO_MS_PER_DEGREE, \
+    .min_fade_time_ms = SERVO_MIN_FADE_TIME_MS, \
+    .max_fade_time_ms = SERVO_MAX_FADE_TIME_MS, \
+    .is_calibrated = false,              \
+    .calibration_min_angle = SERVO_MIN_ANGLE, \
+    .calibration_max_angle = SERVO_MAX_ANGLE, \
     .calibration_min_duty = 0,           \
     .calibration_max_duty = 0            \
 }

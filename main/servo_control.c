@@ -425,34 +425,6 @@ void servo_control_task(void *pvParameters)
     }
 }
 
-// esp_err_t servo_init(void)
-// {
-//     ESP_LOGI(TAG, "Инициализация управления сервоприводом...");
-
-//     // Настройка GPIO для управления питанием сервопривода
-//     gpio_config_t io_conf = {
-//         .pin_bit_mask = (1ULL << SERVO_POWER_GPIO),
-//         .mode = GPIO_MODE_OUTPUT,
-//         .pull_up_en = GPIO_PULLUP_DISABLE,
-//         .pull_down_en = GPIO_PULLDOWN_DISABLE,
-//         .intr_type = GPIO_INTR_DISABLE};
-
-//     esp_err_t ret = gpio_config(&io_conf);
-//     if (ret != ESP_OK)
-//     {
-//         ESP_LOGE(TAG, "Ошибка настройки GPIO питания сервопривода: %s", esp_err_to_name(ret));
-//         return ret;
-//     }
-
-//     // // Изначально питание выключено
-//     // gpio_set_level(SERVO_POWER_GPIO, 0);
-//     // ESP_LOGI(TAG, "GPIO питания сервопривода инициализирован");
-
-//     ESP_LOGI(TAG, "Управление сервоприводом инициализировано. Ожидание уведомления задачи для начальной позиции.");
-
-//     return ESP_OK; // Возвращаем ESP_OK, так как основная инициализация периферии завершена
-// }
-
 // Функция для обновления данных калибровки
 esp_err_t servo_control_update_calibration(const servo_calibration_data_t *calibration_data)
 {

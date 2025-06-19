@@ -362,8 +362,10 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_zb_power_save_init());
     /* load Zigbee platform config to initialization */
     ESP_ERROR_CHECK(esp_zb_platform_config(&config));
-    // // Инициализируем сервопривод перед использованием
-    // ESP_ERROR_CHECK(servo_init());
+    
+    // Инициализируем сервопривод с конфигурацией по умолчанию
+    servo_control_config_t servo_config = SERVO_CONTROL_DEFAULT_CONFIG();
+    ESP_ERROR_CHECK(servo_control_init(&servo_config));
     
     // Инициализируем модуль калибровки сервопривода
     ESP_ERROR_CHECK(servo_calibration_init());
